@@ -56,6 +56,17 @@ jobs:
           echo "--- chip ---"; grep -n 'FTS_CHIP_TYPE' drivers/input/touchscreen/focaltech_touch/focaltech_config.h
           echo "--- kconfig tail ---"; tail -3 drivers/input/touchscreen/Kconfig
           echo "--- makefile tail ---"; tail -3 drivers/input/touchscreen/Makefile
+          python3 - <<'EOF'
+          import pathlib
+          p = pathlib.Path('drivers/input/touchscreen/focaltech_touch/focaltech_core.c')
+          s = p.read_text()
+          s = s.replace('extern void mdss_panel_reset_skip_enable(bool enable);',
+                        'static inline void mdss_panel_reset_skip_enable(bool enable) { (void)enable; }')
+          s = s.replace('extern bool mdss_panel_is_prim(void *fbinfo);',
+                        'static inline bool mdss_panel_is_prim(void *fbinfo) { (void)fbinfo; return true; }')
+          p.write_text(s)
+          print('patched mdss helpers')
+          EOF
 
       - name: 配置 (h7000_defconfig)
         run: |
