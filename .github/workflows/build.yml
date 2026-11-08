@@ -40,7 +40,8 @@ jobs:
           cd kernel
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
-          make O=out -j"$(nproc)" Image
+          # 绕过 scripts/gcc-wrapper.py（python2 脚本），host 工具加 -fcommon（GCC 10+ 默认 -fno-common）
+          make O=out -j"$(nproc)" CC="${CROSS_COMPILE}gcc" HOSTCFLAGS="-fcommon" Image
 
       - name: 检查产物
         run: |
