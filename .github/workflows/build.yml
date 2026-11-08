@@ -1,0 +1,60 @@
+name: build-h7000-kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装编译依赖
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex libssl-dev libncurses-dev python3 zip unzip xxd \
+            lib32z1 lib32stdc++6 ca-certificates
+
+      - name: 下载 AOSP GCC 4.9 工具链 (aarch64)
+        run: |
+          git clone --depth 1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9 tc
+          ./tc/bin/aarch64-linux-android-gcc --version | head -1
+          echo "$GITHUB_WORKSPACE/tc/bin" >> "$GITHUB_PATH"
+
+      - name: 拉取内核源码
+        run: |
+          git clone --depth 1 https://github.com/sysdrivers/kernel_h7000_bbk.git kernel
+          cd kernel && git log -1 --oneline
+
+      - name: 配置 (h7000_defconfig)
+        run: |
+          cd kernel
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-android-
+          make O=out h7000_defconfig
+
+      - name: 编译 Image
+        run: |
+          cd kernel
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-android-
+          make O=out -j"$(nproc)" Image
+
+      - name: 检查产物
+        run: |
+          ls -l kernel/out/arch/arm64/boot/Image
+          xxd -l 64 kernel/out/arch/arm64/boot/Image
+
+      - name: 打包 boot.img
+        run: |
+          python3 scripts/repack.py kernel/out/arch/arm64/boot/Image assets out
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: boot-img
+          path: |
+            out/boot.img
+            kernel/out/arch/arm64/boot/Image
