@@ -6,7 +6,7 @@ on:
       chip:
         description: "FocalTech 芯片型号（_FT8719 / _FT8716 / _FT8736 / _FT8739 …）"
         type: string
-        default: "_FT8719"
+        default: "_FT8201"
       ksu:
         description: "同时集成 KernelSU（暂未启用）"
         type: boolean
@@ -53,6 +53,9 @@ jobs:
             echo 'source "drivers/input/touchscreen/focaltech_touch/Kconfig"' >> drivers/input/touchscreen/Kconfig
           sed -i 's|^#define FTS_CHIP_TYPE.*|#define FTS_CHIP_TYPE   ${{ inputs.chip }}|' \
             drivers/input/touchscreen/focaltech_touch/focaltech_config.h
+          # 这版驱动的 Makefile 用 CONFIG_RIGOL 作开关，改成我们的符号
+          sed -i 's|obj-$(CONFIG_RIGOL)|obj-$(CONFIG_TOUCHSCREEN_FTS)|' \
+            drivers/input/touchscreen/focaltech_touch/Makefile
           echo "--- chip ---"; grep -n 'FTS_CHIP_TYPE' drivers/input/touchscreen/focaltech_touch/focaltech_config.h
           echo "--- kconfig tail ---"; tail -3 drivers/input/touchscreen/Kconfig
           echo "--- makefile tail ---"; tail -3 drivers/input/touchscreen/Makefile

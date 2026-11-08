@@ -2,8 +2,7 @@
  *
  * FocalTech fts TouchScreen driver.
  *
- * Copyright (c) 2010-2017, Focaltech Ltd. All rights reserved.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (c) 2012-2018, Focaltech Ltd. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -37,7 +36,7 @@
 /*****************************************************************************
 * Macro definitions using #define
 *****************************************************************************/
-#define FTS_DRIVER_VERSION                  "Focaltech V2.1 20171229"
+#define FTS_DRIVER_VERSION                  "Focaltech V3.0a 20180929"
 
 #define BYTE_OFF_0(x)           (u8)((x) & 0xFF)
 #define BYTE_OFF_8(x)           (u8)((x >> 8) & 0xFF)
@@ -55,7 +54,7 @@
 #define FTS_CHIP_IDC            ((FTS_CHIP_TYPE & FLAGBIT(FLAG_IDC_BIT)) == FLAGBIT(FLAG_IDC_BIT))
 #define FTS_HID_SUPPORTTED      ((FTS_CHIP_TYPE & FLAGBIT(FLAG_HID_BIT)) == FLAGBIT(FLAG_HID_BIT))
 
-#define FTS_CHIP_TYPE_MAPPING { {0x0D, 0x87, 0x19, 0x87, 0x19, 0x87, 0xA9, 0x87, 0xB9} }
+#define FTS_CHIP_TYPE_MAPPING {{0x10,0x82, 0x01, 0x80, 0x06, 0x80, 0xC6, 0x80, 0xB6}}
 
 #define I2C_BUFFER_LENGTH_MAXINUM           256
 #define FILE_NAME_LENGTH                    128
@@ -75,7 +74,6 @@
 #define FTS_REG_WORKMODE                    0x00
 #define FTS_REG_WORKMODE_FACTORY_VALUE      0x40
 #define FTS_REG_WORKMODE_WORK_VALUE         0x00
-#define FTS_REG_DYNAMIC_EGDE_RESTRAIN       0X8C
 #define FTS_REG_ESDCHECK_DISABLE            0x8D
 #define FTS_REG_CHIP_ID                     0xA3
 #define FTS_REG_CHIP_ID2                    0x9F
@@ -102,10 +100,10 @@
 
 #define kfree_safe(pbuf) do {\
     if (pbuf) {\
-			kfree(pbuf);\
-			pbuf = NULL;\
-    } \
-} while (0)
+        kfree(pbuf);\
+        pbuf = NULL;\
+    }\
+} while(0)
 
 /*****************************************************************************
 *  Alternative mode (When something goes wrong, the modules may be able to solve the problem.)
@@ -120,21 +118,21 @@
 * Global variable or extern global variabls/functions
 *****************************************************************************/
 struct ft_chip_t {
-	u64 type;
-	u8 chip_idh;
-	u8 chip_idl;
-	u8 rom_idh;
-	u8 rom_idl;
-	u8 pb_idh;
-	u8 pb_idl;
-	u8 bl_idh;
-	u8 bl_idl;
+    u64 type;
+    u8 chip_idh;
+    u8 chip_idl;
+    u8 rom_idh;
+    u8 rom_idl;
+    u8 pb_idh;
+    u8 pb_idl;
+    u8 bl_idh;
+    u8 bl_idl;
 };
 
 struct ts_ic_info {
-	bool is_incell;
-	bool hid_supported;
-	struct ft_chip_t ids;
+    bool is_incell;
+    bool hid_supported;
+    struct ft_chip_t ids;
 };
 
 /*****************************************************************************
@@ -149,7 +147,7 @@ struct ts_ic_info {
 #endif
 #define FTS_FUNC_ENTER() printk("[FTS]%s: Enter\n", __func__)
 #define FTS_FUNC_EXIT()  printk("[FTS]%s: Exit(%d)\n", __func__, __LINE__)
-#else /* #if FTS_DEBUG_EN */
+#else /* #if FTS_DEBUG_EN*/
 #define FTS_DEBUG(fmt, args...)
 #define FTS_FUNC_ENTER()
 #define FTS_FUNC_EXIT()

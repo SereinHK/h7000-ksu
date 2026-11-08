@@ -1,6 +1,6 @@
-#drivers/input/touchscreen/focaltech_ts/focaltech_test
+# SPDX-License-Identifier: GPL-2.0
 #
 # Makefile for test module
 #
 # Linux driver folder
-obj-$(CONFIG_TOUCHSCREEN_FTS) += focaltech_test_ft8719.o
+obj-y += focaltech_test_ft8201.o

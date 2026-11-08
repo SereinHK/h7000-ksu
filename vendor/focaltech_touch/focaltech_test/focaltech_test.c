@@ -2,8 +2,7 @@
  *
  * FocalTech TouchScreen driver.
  *
- * Copyright (c) 2010-2017, FocalTech Systems, Ltd., all rights reserved.
- * Copyright (C) 2020 XiaoMi, Inc.
+ * Copyright (c) 2012-2018, FocalTech Systems, Ltd., all rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -20,7 +19,7 @@
 *
 * File Name: focaltech_test.c
 *
-* Author:     Software Department, FocalTech
+* Author: Focaltech Driver Team
 *
 * Created: 2016-08-01
 *
@@ -42,79 +41,10 @@
 /*****************************************************************************
 * Global variable or extern global variabls/functions
 *****************************************************************************/
-struct fts_test_data test_data;
+struct fts_test *fts_ftest;
 
-struct test_funcs *test_funcs_list[] = {
-	&test_func_ft8719,
-};
-
-static int fts_test_result = SELFTEST_INVALID;
-
-struct test_ic_type ic_types[] = {
-	{"FT5X22", 6, IC_FT5X46, 0},
-	{"FT5X46", 6, IC_FT5X46, 0},
-	{"FT5X46i", 7, IC_FT5X46I, 0},
-	{"FT5526", 6, IC_FT5526, 0},
-	{"FT3X17", 6, IC_FT3X17, 0},
-	{"FT5436", 6, IC_FT5436, 0},
-	{"FT3X27", 6, IC_FT3X27, 0},
-	{"FT5526i", 7, IC_FT5526I, 0},
-	{"FT5416", 6, IC_FT5416, 0},
-	{"FT5426", 6, IC_FT5426, 0},
-	{"FT5435", 6, IC_FT5435, 0},
-	{"FT7681", 6, IC_FT7681, 0},
-	{"FT7661", 6, IC_FT7661, 0},
-	{"FT7511", 6, IC_FT7511, 0},
-	{"FT7421", 6, IC_FT7421, 0},
-	{"FT7311", 6, IC_FT7311, 0},
-
-	{"FT6X36", 6, IC_FT6X36, 0},
-	{"FT3X07", 6, IC_FT3X07, 0},
-	{"FT6416", 6, IC_FT6416, 0},
-	{"FT6336G/U", 9, IC_FT6426, 0},
-	{"FT6236U", 7, IC_FT6236U, 0},
-	{"FT6436U", 7, IC_FT6436U, 0},
-	{"FT3267", 6, IC_FT3267, 0},
-	{"FT3367", 6, IC_FT3367, 0},
-	{"FT7401", 6, IC_FT7401, 0},
-	{"FT3407U", 7, IC_FT3407U, 0},
-
-	{"FT5822", 6, IC_FT5822, 0},
-	{"FT5626", 6, IC_FT5626, 0},
-	{"FT5726", 6, IC_FT5726, 0},
-	{"FT5826B", 7, IC_FT5826B, 0},
-	{"FT3617", 6, IC_FT3617, 0},
-	{"FT3717", 6, IC_FT3717, 0},
-	{"FT7811", 6, IC_FT7811, 0},
-	{"FT5826S", 7, IC_FT5826S, 0},
-	{"FT3517U", 7, IC_FT3517U, 0},
-
-	{"FT8606", 6, IC_FT8606, 0},
-
-	{"FT8716U", 7, IC_FT8716U, 0},
-	{"FT8716F", 7, IC_FT8716F, 0},
-	{"FT8716", 6, IC_FT8716, 0},
-	{"FT8613", 6, IC_FT8613, 0},
-
-	{"FT3C47U", 7, IC_FT3C47U, 0},
-
-	{"FT8607U", 7, IC_FT8607U, 0},
-	{"FT8607", 6, IC_FT8607, 0},
-
-	{"FT8736", 6, IC_FT8736, 0},
-
-	{"FT3D47", 6, IC_FT3D47, 0},
-
-	{"FTE716", 6, IC_FTE716, 0},
-
-	{"FT8201", 6, IC_FT8201, 0},
-
-	{"FT8006M", 7, IC_FT8006M, 0},
-
-	{"FT8006U", 7, IC_FT8006U, 0},
-
-	{"FT8719", 6, IC_FT8719, 0x8719},
-
+struct test_funcs *test_func_list[] = {
+    &test_func_ft8201,
 };
 
 /*****************************************************************************
@@ -126,83 +56,188 @@ struct test_ic_type ic_types[] = {
 *****************************************************************************/
 void sys_delay(int ms)
 {
-	msleep(ms);
+    msleep(ms);
 }
 
 int focal_abs(int value)
 {
-	if (value < 0)
-		value = 0 - value;
+    if (value < 0)
+        value = 0 - value;
 
-	return value;
+    return value;
 }
 
 void *fts_malloc(size_t size)
 {
-	return kzalloc(size, GFP_ATOMIC);
+    return kzalloc(size, GFP_KERNEL);
 }
 
 void fts_free_proc(void *p)
 {
-	return kfree(p);
+    return kfree(p);
+}
+
+void print_buffer(int *buffer, int length, int line_num)
+{
+    int i = 0;
+
+    if (NULL == buffer) {
+        FTS_TEST_DBG("buffer is null");
+        return;
+    }
+
+    for (i = 0; i < length; i++) {
+        printk("%5d ", buffer[i]);
+        if ((0 == (i + 1) % line_num))
+            printk("\n");
+    }
+    printk("\n");
 }
 
 /********************************************************************
  * test i2c read/write interface
  *******************************************************************/
-int fts_test_i2c_read(u8 *writebuf, int writelen, u8 *readbuf, int readlen)
+static int fts_test_i2c_read(u8 *writebuf, int writelen, u8 *readbuf, int readlen)
 {
-	int ret = 0;
+    int ret = 0;
 #if 1
-	if (NULL == fts_data) {
-		FTS_TEST_ERROR("fts_data is null, no test");
-		return -EINVAL;
-	}
-	ret = fts_i2c_read(fts_data->client, writebuf, writelen, readbuf, readlen);
+    if (NULL == fts_data) {
+        FTS_TEST_ERROR("fts_data is null, no test");
+        return -EINVAL;
+    }
+    ret = fts_i2c_read(fts_data->client, writebuf, writelen, readbuf, readlen);
 #else
-	ret = fts_i2c_read(writebuf, writelen, readbuf, readlen);
+    ret = fts_i2c_read(writebuf, writelen, readbuf, readlen);
 #endif
 
-	if (ret < 0)
-		return ret;
-	else
-		return 0;
+    if (ret < 0)
+        return ret;
+    else
+        return 0;
 }
 
-int fts_test_i2c_write(u8 *writebuf, int writelen)
+static int fts_test_i2c_write(u8 *writebuf, int writelen)
 {
-	int ret = 0;
+    int ret = 0;
 #if 1
-	if (NULL == fts_data) {
-		FTS_TEST_ERROR("fts_data is null, no test");
-		return -EINVAL;
-	}
-	ret = fts_i2c_write(fts_data->client, writebuf, writelen);
+    if (NULL == fts_data) {
+        FTS_TEST_ERROR("fts_data is null, no test");
+        return -EINVAL;
+    }
+    ret = fts_i2c_write(fts_data->client, writebuf, writelen);
 #else
-	ret = fts_i2c_write(writebuf, writelen);
+    ret = fts_i2c_write(writebuf, writelen);
 #endif
 
-	if (ret < 0)
-		return ret;
-	else
-		return 0;
+    if (ret < 0)
+        return ret;
+    else
+        return 0;
 }
 
-int read_reg(u8 addr, u8 *val)
+int fts_test_read_reg(u8 addr, u8 *val)
 {
-	return fts_test_i2c_read(&addr, 1, val, 1);
+    return fts_test_i2c_read(&addr, 1, val, 1);
 }
 
-int write_reg(u8 addr, u8 val)
+int fts_test_write_reg(u8 addr, u8 val)
 {
-	int ret;
-	u8 cmd[2] = { 0 };
+    int ret;
+    u8 cmd[2] = {0};
 
-	cmd[0] = addr;
-	cmd[1] = val;
-	ret = fts_test_i2c_write(cmd, 2);
+    cmd[0] = addr;
+    cmd[1] = val;
+    ret = fts_test_i2c_write(cmd, 2);
 
-	return ret;
+    return ret;
+}
+
+int fts_test_read(u8 addr, u8 *readbuf, int readlen)
+{
+    int ret = 0;
+    int i = 0;
+    int packet_length = 0;
+    int packet_num = 0;
+    int packet_remainder = 0;
+    int offset = 0;
+    int byte_num = readlen;
+
+    packet_num = byte_num / BYTES_PER_TIME;
+    packet_remainder = byte_num % BYTES_PER_TIME;
+    if (packet_remainder)
+        packet_num++;
+
+    if (byte_num < BYTES_PER_TIME) {
+        packet_length = byte_num;
+    } else {
+        packet_length = BYTES_PER_TIME;
+    }
+    //    FTS_TEST_DBG("packet num:%d, remainder:%d", packet_num, packet_remainder);
+
+    ret = fts_test_i2c_read(&addr, 1, &readbuf[offset], packet_length);
+    if (ret < 0) {
+        FTS_TEST_ERROR("read buffer fail");
+        return ret;
+    }
+    for (i = 1; i < packet_num; i++) {
+        offset += packet_length;
+        if ((i == (packet_num - 1)) && packet_remainder) {
+            packet_length = packet_remainder;
+        }
+
+        ret = fts_test_i2c_read(NULL, 0, &readbuf[offset], packet_length);
+        if (ret < 0) {
+            FTS_TEST_ERROR("read buffer fail");
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+int fts_test_write(u8 addr, u8 *writebuf, int writelen)
+{
+    int ret = 0;
+    int i = 0;
+    u8 data[BYTES_PER_TIME + 1] = { 0 };
+    int packet_length = 0;
+    int packet_num = 0;
+    int packet_remainder = 0;
+    int offset = 0;
+    int byte_num = writelen;
+
+    packet_num = byte_num / BYTES_PER_TIME;
+    packet_remainder = byte_num % BYTES_PER_TIME;
+    if (packet_remainder)
+        packet_num++;
+
+    if (byte_num < BYTES_PER_TIME) {
+        packet_length = byte_num;
+    } else {
+        packet_length = BYTES_PER_TIME;
+    }
+    FTS_TEST_DBG("packet num:%d, remainder:%d", packet_num, packet_remainder);
+
+    data[0] = addr;
+    for (i = 0; i < packet_num; i++) {
+        if (i != 0) {
+            data[0] = addr + 1;
+        }
+        if ((i == (packet_num - 1)) && packet_remainder) {
+            packet_length = packet_remainder;
+        }
+        memcpy(&data[1], &writebuf[offset], packet_length);
+
+        ret = fts_test_i2c_write(data, packet_length + 1);
+        if (ret < 0) {
+            FTS_TEST_ERROR("write buffer fail");
+            return ret;
+        }
+
+        offset += packet_length;
+    }
+
+    return 0;
 }
 
 /********************************************************************
@@ -210,97 +245,78 @@ int write_reg(u8 addr, u8 val)
  *******************************************************************/
 int enter_work_mode(void)
 {
-	int ret = 0;
-	u8 mode = 0;
-	int i = 0;
-	int j = 0;
+    int ret = 0;
+    u8 mode = 0;
+    int i = 0;
+    int j = 0;
 
-	FTS_TEST_FUNC_ENTER();
+    FTS_TEST_FUNC_ENTER();
 
-	ret = read_reg(DEVIDE_MODE_ADDR, &mode);
-	if ((0 == ret) && (((mode >> 4) & 0x07) == 0x00))
-		return 0;
+    ret = fts_test_read_reg(DEVIDE_MODE_ADDR, &mode);
+    if ((ret >= 0) && (0x00 == mode))
+        return 0;
 
-	for (i = 0; i < ENTER_WORK_FACTORY_RETRIES; i++) {
-		ret = write_reg(DEVIDE_MODE_ADDR, 0x00);
-		if (0 == ret) {
-			for (j = 0; j < 20; j++) {
-				ret = read_reg(DEVIDE_MODE_ADDR, &mode);
-				if ((0 == ret) && (((mode >> 4) & 0x07) == 0x00))
-					return 0;
-				else
-					sys_delay(FACTORY_TEST_DELAY);
-			}
-		}
+    for (i = 0; i < ENTER_WORK_FACTORY_RETRIES; i++) {
+        ret = fts_test_write_reg(DEVIDE_MODE_ADDR, 0x00);
+        if (ret >= 0) {
+            sys_delay(FACTORY_TEST_DELAY);
+            for (j = 0; j < 20; j++) {
+                ret = fts_test_read_reg(DEVIDE_MODE_ADDR, &mode);
+                if ((ret >= 0) && (0x00 == mode)) {
+                    FTS_TEST_INFO("enter work mode success");
+                    return 0;
+                } else
+                    sys_delay(FACTORY_TEST_DELAY);
+            }
+        }
 
-		sys_delay(50);
-	}
+        sys_delay(50);
+    }
 
-	if (i >= ENTER_WORK_FACTORY_RETRIES) {
-		FTS_TEST_ERROR("Enter work mode fail");
-		return -EIO;
-	}
+    if (i >= ENTER_WORK_FACTORY_RETRIES) {
+        FTS_TEST_ERROR("Enter work mode fail");
+        return -EIO;
+    }
 
-	FTS_TEST_FUNC_EXIT();
-	return 0;
+    FTS_TEST_FUNC_EXIT();
+    return 0;
 }
 
 int enter_factory_mode(void)
 {
-	int ret = 0;
-	u8 mode = 0;
-	int i = 0;
-	int j = 0;
+    int ret = 0;
+    u8 mode = 0;
+    int i = 0;
+    int j = 0;
 
-	ret = read_reg(DEVIDE_MODE_ADDR, &mode);
-	if ((0 == ret) && (((mode >> 4) & 0x07) == 0x04))
-		return 0;
+    ret = fts_test_read_reg(DEVIDE_MODE_ADDR, &mode);
+    if ((ret >= 0) && (0x40 == mode))
+        return 0;
 
-	for (i = 0; i < ENTER_WORK_FACTORY_RETRIES; i++) {
-		ret = write_reg(DEVIDE_MODE_ADDR, 0x40);
-		if (0 == ret) {
-			for (j = 0; j < 20; j++) {
-				ret = read_reg(DEVIDE_MODE_ADDR, &mode);
-				if ((0 == ret) && (((mode >> 4) & 0x07) == 0x04)) {
-					sys_delay(200);
-					return 0;
-				} else
-					sys_delay(FACTORY_TEST_DELAY);
-			}
-		}
+    for (i = 0; i < ENTER_WORK_FACTORY_RETRIES; i++) {
+        ret = fts_test_write_reg(DEVIDE_MODE_ADDR, 0x40);
+        if (ret >= 0) {
+            sys_delay(FACTORY_TEST_DELAY);
+            for (j = 0; j < 20; j++) {
+                ret = fts_test_read_reg(DEVIDE_MODE_ADDR, &mode);
+                if ((ret >= 0) && (0x40 == mode)) {
+                    FTS_TEST_INFO("enter factory mode success");
+                    sys_delay(200);
+                    return 0;
+                } else
+                    sys_delay(FACTORY_TEST_DELAY);
+            }
+        }
 
-		sys_delay(50);
-	}
+        sys_delay(50);
+    }
 
-	if (i >= ENTER_WORK_FACTORY_RETRIES) {
-		FTS_TEST_ERROR("Enter factory mode fail");
-		return -EIO;
-	}
+    if (i >= ENTER_WORK_FACTORY_RETRIES) {
+        FTS_TEST_ERROR("Enter factory mode fail");
+        return -EIO;
+    }
 
-	return 0;
-}
-
-/************************************************************************
-* Name: fts_i2c_read_write
-* Brief:  Write/Read Data by IIC
-* Input: writebuf, writelen, readlen
-* Output: readbuf
-* Return: Comm Code. Code = 0x00 is OK, else fail.
-***********************************************************************/
-unsigned char fts_i2c_read_write(unsigned char *writebuf, int writelen, unsigned char *readbuf, int readlen)
-{
-	int ret;
-
-	if (readlen > 0) {
-		ret = fts_test_i2c_read(writebuf, writelen, readbuf, readlen);
-	} else {
-		ret = fts_test_i2c_write(writebuf, writelen);
-	}
-
-	if (ret >= 0)
-		return ERROR_CODE_OK;
-	else
-		return ERROR_CODE_COMM_ERROR;
+    return 0;
 }
 
 /*
@@ -313,231 +329,269 @@ unsigned char fts_i2c_read_write(unsigned char *writebuf, int writelen, unsigned
  */
 int read_mass_data(u8 addr, int byte_num, int *buf)
 {
-	int ret = 0;
-	int i = 0;
-	u8 reg_addr = 0;
-	u8 *data = NULL;
-	int read_num = 0;
-	int packet_num = 0;
-	int packet_remainder = 0;
-	int offset = 0;
+    int ret = 0;
+    int i = 0;
+    u8 *data = NULL;
 
-	data = (u8 *) fts_malloc(byte_num * sizeof(u8));
-	if (NULL == data) {
-		FTS_TEST_SAVE_INFO("rawdata buffer malloc fail\n");
-		return -ENOMEM;
-	}
+    data = (u8 *)fts_malloc(byte_num * sizeof(u8));
+    if (NULL == data) {
+        FTS_TEST_SAVE_ERR("mass data buffer malloc fail\n");
+        return -ENOMEM;
+    }
 
-	/* read rawdata buffer */
-	FTS_TEST_INFO("mass data len:%d", byte_num);
-	packet_num = byte_num / BYTES_PER_TIME;
-	packet_remainder = byte_num % BYTES_PER_TIME;
-	if (packet_remainder)
-		packet_num++;
+    /* read rawdata buffer */
+    FTS_TEST_INFO("mass data len:%d", byte_num);
+    ret = fts_test_read(addr, data, byte_num);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("read mass data fail\n");
+        goto read_massdata_err;
+    }
 
-	if (byte_num < BYTES_PER_TIME) {
-		read_num = byte_num;
-	} else {
-		read_num = BYTES_PER_TIME;
-	}
-	FTS_TEST_INFO("packet num:%d, remainder:%d", packet_num, packet_remainder);
+    for (i = 0; i < byte_num; i = i + 2) {
+        buf[i >> 1] = (int)(((int)(data[i]) << 8) + data[i + 1]);
+    }
 
-	reg_addr = addr;
-	ret = fts_test_i2c_read(&reg_addr, 1, data, read_num);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("read rawdata fail\n");
-		goto READ_MASSDATA_ERR;
-	}
-
-	for (i = 1; i < packet_num; i++) {
-		offset = read_num * i;
-		if ((i == (packet_num - 1)) && packet_remainder) {
-			read_num = packet_remainder;
-		}
-
-		ret = fts_test_i2c_read(NULL, 0, data + offset, read_num);
-		if (ret) {
-			FTS_TEST_SAVE_INFO("read much rawdata fail\n");
-			goto READ_MASSDATA_ERR;
-		}
-	}
-
-	for (i = 0; i < byte_num; i = i + 2) {
-		buf[i >> 1] = (int)(((int)(data[i]) << 8) + data[i + 1]);
-	}
-
-READ_MASSDATA_ERR:
-	if (data) {
-		fts_free(data);
-	}
-
-	return ret;
+    ret = 0;
+read_massdata_err:
+    fts_free(data);
+    return ret;
 }
 
-/*
- * chip_clb_incell - auto clb
- */
-int chip_clb_incell(void)
+int short_get_adcdata_incell(u8 retval, u8 ch_num, int byte_num, int *adc_buf)
 {
-	int ret = 0;
-	u8 val = 0;
-	int times = 0;
+    int ret = 0;
+    int times = 0;
+    u8 short_state = 0;
 
-	/* start clb */
-	ret = write_reg(FACTORY_REG_CLB, 0x04);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("write start clb fail\n");
-		return ret;
-	}
+    FTS_TEST_FUNC_ENTER();
 
-	sys_delay(120);
-	while (times++ < FACTORY_TEST_RETRY) {
-		ret = read_reg(FACTORY_REG_CLB, &val);
-		if ((0 == ret) && (0x02 == val)) {
-			/* clb ok */
-			break;
-		} else
-			FTS_TEST_DBG("reg%x=%x,retry:%d", FACTORY_REG_CLB, val, times);
+    /* Start ADC sample */
+    ret = fts_test_write_reg(FACTORY_REG_SHORT_TEST_EN, 0x01);
+    if (ret) {
+        FTS_TEST_SAVE_ERR("start short test fail\n");
+        goto adc_err;
+    }
 
-		sys_delay(FACTORY_TEST_DELAY);
-	}
+    sys_delay(ch_num * FACTORY_TEST_DELAY);
+    for (times = 0; times < FACTORY_TEST_RETRY; times++) {
+        ret = fts_test_read_reg(FACTORY_REG_SHORT_TEST_STATE, &short_state);
+        if ((ret >= 0) && (retval == short_state))
+            break;
+        else
+            FTS_TEST_DBG("reg%x=%x,retry:%d",
+                         FACTORY_REG_SHORT_TEST_STATE, short_state, times);
 
-	if (times >= FACTORY_TEST_RETRY) {
-		FTS_TEST_SAVE_INFO("chip clb timeout\n");
-		return -EIO;
-	}
+        sys_delay(FACTORY_TEST_RETRY_DELAY);
+    }
+    if (times >= FACTORY_TEST_RETRY) {
+        FTS_TEST_SAVE_ERR("short test timeout, ADC data not OK\n");
+        ret = -EIO;
+        goto adc_err;
+    }
 
-	return 0;
-}
+    ret = read_mass_data(FACTORY_REG_SHORT_ADDR, byte_num, adc_buf);
+    if (ret) {
+        FTS_TEST_SAVE_ERR("get short(adc) data fail\n");
+    }
 
-/*
- * start_scan_incell - start to scan a frame for incell ic
- */
-int start_scan_incell(void)
-{
-	int ret = 0;
-	u8 val = 0x00;
-	int times = 0;
-
-	ret = read_reg(DEVIDE_MODE_ADDR, &val);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("read device mode fail\n");
-		return ret;
-	}
-
-	/* Top bit position 1, start scan */
-	val |= 0x80;
-	ret = write_reg(DEVIDE_MODE_ADDR, val);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("write device mode fail\n");
-		return ret;
-	}
-
-	while (times++ < FACTORY_TEST_RETRY) {
-		/* Wait for the scan to complete */
-		sys_delay(FACTORY_TEST_DELAY);
-
-		ret = read_reg(DEVIDE_MODE_ADDR, &val);
-		if ((0 == ret) && (0 == (val >> 7))) {
-			break;
-		} else
-			FTS_TEST_DBG("reg%x=%x,retry:%d", DEVIDE_MODE_ADDR, val, times);
-	}
-
-	if (times >= FACTORY_TEST_RETRY) {
-		FTS_TEST_SAVE_INFO("start scan timeout\n");
-		return -EIO;
-	}
-
-	return 0;
+adc_err:
+    FTS_TEST_FUNC_EXIT();
+    return ret;
 }
 
 /*
  * wait_state_update - wait fw status update
  */
-int wait_state_update(void)
+int wait_state_update(u8 retval)
 {
-	int ret = 0;
-	int times = 0;
-	u8 state = 0xFF;
+    int ret = 0;
+    int times = 0;
+    u8 state = 0xFF;
 
-	while (times++ < FACTORY_TEST_RETRY) {
-		sys_delay(100);
-		/* Wait register status update */
-		state = 0xFF;
-		ret = read_reg(FACTORY_REG_PARAM_UPDATE_STATE, &state);
-		if ((0 == ret) && (0x00 == state))
-			break;
-		else
-			FTS_TEST_DBG("reg%x=%x,retry:%d", FACTORY_REG_PARAM_UPDATE_STATE, state, times);
-	}
+    while (times++ < FACTORY_TEST_RETRY) {
+        sys_delay(FACTORY_TEST_DELAY);
+        /* Wait register status update */
+        state = 0xFF;
+        ret = fts_test_read_reg(FACTORY_REG_PARAM_UPDATE_STATE, &state);
+        if ((ret >= 0) && (retval == state))
+            break;
+        else
+            FTS_TEST_DBG("reg%x=%x,retry:%d", \
+                         FACTORY_REG_PARAM_UPDATE_STATE, state, times);
+    }
 
-	if (times >= FACTORY_TEST_RETRY) {
-		FTS_TEST_SAVE_INFO("Wait State Update fail\n");
-		return -EIO;
-	}
+    if (times >= FACTORY_TEST_RETRY) {
+        FTS_TEST_SAVE_ERR("Wait State Update fail\n");
+        return -EIO;
+    }
 
-	return 0;
+    return 0;
 }
 
 /*
- * get_rawdata_incell - read rawdata/diff for incell ic
+ * start_scan - start to scan a frame
  */
-int get_rawdata_incell(int *data)
+int start_scan(void)
 {
-	int ret = 0;
-	u8 tx_num = 0;
-	u8 rx_num = 0;
-	u8 key_num = 0;
-	int va_num = 0;
+    int ret = 0;
+    u8 addr = 0;
+    u8 val = 0;
+    u8 finish_val = 0;
+    int times = 0;
+    struct fts_test *tdata = fts_ftest;
 
-	FTS_TEST_FUNC_ENTER();
-	/* enter into factory mode */
-	ret = enter_factory_mode();
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Enter Factory Mode\n");
-		return ret;
-	}
+    if ((NULL == tdata) || (NULL == tdata->func) ) {
+        FTS_TEST_ERROR("test/func is null\n");
+        return -EINVAL;
+    }
 
-	/* get tx/rx num */
-	tx_num = test_data.screen_param.tx_num;
-	rx_num = test_data.screen_param.rx_num;
-	va_num = tx_num * rx_num;
-	key_num = test_data.screen_param.key_num_total;
+    if (SCAN_SC == tdata->func->startscan_mode) {
+        /* sc ic */
+        addr = FACTORY_REG_SCAN_ADDR2;
+        val = 0x01;
+        finish_val = 0x00;
+    } else {
+        addr = DEVIDE_MODE_ADDR;
+        val = 0xC0;
+        finish_val = 0x40;
+    }
 
-	/* start to scan a frame */
-	ret = start_scan_incell();
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Scan ...\n");
-		return ret;
-	}
+    /* write register to start scan */
+    ret = fts_test_write_reg(addr, val);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("write start scan mode fail\n");
+        return ret;
+    }
 
-	/* Read RawData for va Area */
-	ret = write_reg(FACTORY_REG_LINE_ADDR, 0xAD);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("wirte AD to reg01 fail\n");
-		return ret;
-	}
-	ret = read_mass_data(FACTORY_REG_RAWDATA_ADDR, va_num * 2, data);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Get RawData of channel.\n");
-		return ret;
-	}
+    /* Wait for the scan to complete */
+    while (times++ < FACTORY_TEST_RETRY) {
+        sys_delay(FACTORY_TEST_DELAY);
 
-	/* Read RawData for key Area */
-	ret = write_reg(FACTORY_REG_LINE_ADDR, 0xAE);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("wirte AE to reg01 fail\n");
-		return ret;
-	}
-	ret = read_mass_data(FACTORY_REG_RAWDATA_ADDR, key_num * 2, data + va_num);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Get RawData of keys.\n");
-		return ret;
-	}
+        ret = fts_test_read_reg(addr, &val);
+        if ((ret >= 0) && (val == finish_val)) {
+            break;
+        } else
+            FTS_TEST_DBG("reg%x=%x,retry:%d", addr, val, times);
+    }
 
-	FTS_TEST_FUNC_EXIT();
-	return 0;
+    if (times >= FACTORY_TEST_RETRY) {
+        FTS_TEST_SAVE_ERR("scan timeout\n");
+        return -EIO;
+    }
+
+    return 0;
+}
+
+static int read_rawdata(
+    u8 off_addr,
+    u8 off_val,
+    u8 rawdata_addr,
+    int byte_num,
+    int *data)
+{
+    int ret = 0;
+
+    /* set line addr or rawdata start addr */
+    ret = fts_test_write_reg(off_addr, off_val);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("wirte line/start addr fail\n");
+        return ret;
+    }
+
+    ret = read_mass_data(rawdata_addr, byte_num, data);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("read rawdata fail\n");
+        return ret;
+    }
+
+    return 0;
+}
+
+int get_rawdata(int *data)
+{
+    int ret = 0;
+    u8 val = 0;
+    u8 addr = 0;
+    u8 rawdata_addr = 0;
+    int byte_num = 0;
+    struct fts_test *tdata = fts_ftest;
+
+    if ((NULL == tdata) || (NULL == tdata->func) ) {
+        FTS_TEST_ERROR("test/func is null\n");
+        return -EINVAL;
+    }
+
+    /* enter factory mode */
+    ret = enter_factory_mode();
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("failed to enter factory mode,ret=%d\n", ret);
+        return ret;
+    }
+
+    /* start scanning */
+    ret = start_scan();
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("scan fail\n");
+        return ret;
+    }
+
+    /* read rawdata */
+    if (IC_HW_INCELL == tdata->func->hwtype) {
+        val = 0xAD;
+        addr = FACTORY_REG_LINE_ADDR;
+        rawdata_addr = FACTORY_REG_RAWDATA_ADDR;
+    } else if (IC_HW_MC_SC == tdata->func->hwtype) {
+        val = 0xAA;
+        addr = FACTORY_REG_LINE_ADDR;
+        rawdata_addr = FACTORY_REG_RAWDATA_ADDR_MC_SC;
+    } else {
+        val = 0x0;
+        addr = FACTORY_REG_RAWDATA_SADDR_SC;
+        rawdata_addr = FACTORY_REG_RAWDATA_ADDR_SC;
+    }
+
+    byte_num = tdata->node.node_num * 2;
+    ret = read_rawdata(addr, val, rawdata_addr, byte_num, data);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("read rawdata fail\n");
+        return ret;
+    }
+
+    return 0;
+}
+
+/*
+ * chip_clb - auto clb
+ */
+int chip_clb(void)
+{
+    int ret = 0;
+    u8 val = 0;
+    int times = 0;
+
+    /* start clb */
+    ret = fts_test_write_reg(FACTORY_REG_CLB, 0x04);
+    if (ret) {
+        FTS_TEST_SAVE_ERR("write start clb fail\n");
+        return ret;
+    }
+
+    while (times++ < FACTORY_TEST_RETRY) {
+        sys_delay(FACTORY_TEST_RETRY_DELAY);
+        ret = fts_test_read_reg(FACTORY_REG_CLB, &val);
+        if ((0 == ret) && (0x02 == val)) {
+            /* clb ok */
+            break;
+        } else
+            FTS_TEST_DBG("reg%x=%x,retry:%d", FACTORY_REG_CLB, val, times);
+    }
+
+    if (times >= FACTORY_TEST_RETRY) {
+        FTS_TEST_SAVE_ERR("chip clb timeout\n");
+        return -EIO;
+    }
+
+    return 0;
 }
 
 /*
@@ -545,569 +599,1208 @@ int get_rawdata_incell(int *data)
  */
 int get_cb_incell(u16 saddr, int byte_num, int *cb_buf)
 {
-	int ret = 0;
-	int i = 0;
-	u8 cb_addr = 0;
-	u8 addr_h = 0;
-	u8 addr_l = 0;
-	int read_num = 0;
-	int packet_num = 0;
-	int packet_remainder = 0;
-	int offset = 0;
-	int addr = 0;
-	u8 *data = NULL;
+    int ret = 0;
+    int i = 0;
+    u8 cb_addr = 0;
+    u8 addr_h = 0;
+    u8 addr_l = 0;
+    int read_num = 0;
+    int packet_num = 0;
+    int packet_remainder = 0;
+    int offset = 0;
+    int addr = 0;
+    u8 *data = NULL;
 
-	data = (u8 *) fts_malloc(byte_num * sizeof(u8));
-	if (NULL == data) {
-		FTS_TEST_SAVE_INFO("cb buffer malloc fail\n");
-		return -ENOMEM;
-	}
+    data = (u8 *)fts_malloc(byte_num * sizeof(u8));
+    if (NULL == data) {
+        FTS_TEST_SAVE_ERR("cb buffer malloc fail\n");
+        return -ENOMEM;
+    }
 
-	packet_num = byte_num / BYTES_PER_TIME;
-	packet_remainder = byte_num % BYTES_PER_TIME;
-	if (packet_remainder)
-		packet_num++;
-	read_num = BYTES_PER_TIME;
+    packet_num = byte_num / BYTES_PER_TIME;
+    packet_remainder = byte_num % BYTES_PER_TIME;
+    if (packet_remainder)
+        packet_num++;
+    read_num = BYTES_PER_TIME;
 
-	FTS_TEST_INFO("cb packet:%d,remainder:%d", packet_num, packet_remainder);
-	cb_addr = FACTORY_REG_CB_ADDR;
-	for (i = 0; i < packet_num; i++) {
-		offset = read_num * i;
-		addr = saddr + offset;
-		addr_h = (addr >> 8) & 0xFF;
-		addr_l = addr & 0xFF;
-		if ((i == (packet_num - 1)) && packet_remainder) {
-			read_num = packet_remainder;
-		}
+    FTS_TEST_INFO("cb packet:%d,remainder:%d", packet_num, packet_remainder);
+    cb_addr = FACTORY_REG_CB_ADDR;
+    for (i = 0; i < packet_num; i++) {
+        offset = read_num * i;
+        addr = saddr + offset;
+        addr_h = (addr >> 8) & 0xFF;
+        addr_l = addr & 0xFF;
+        if ((i == (packet_num - 1)) && packet_remainder) {
+            read_num = packet_remainder;
+        }
 
-		ret = write_reg(FACTORY_REG_CB_ADDR_H, addr_h);
-		if (ret) {
-			FTS_TEST_SAVE_INFO("write cb addr high fail\n");
-			goto TEST_CB_ERR;
-		}
-		ret = write_reg(FACTORY_REG_CB_ADDR_L, addr_l);
-		if (ret) {
-			FTS_TEST_SAVE_INFO("write cb addr low fail\n");
-			goto TEST_CB_ERR;
-		}
+        ret = fts_test_write_reg(FACTORY_REG_CB_ADDR_H, addr_h);
+        if (ret) {
+            FTS_TEST_SAVE_ERR("write cb addr high fail\n");
+            goto TEST_CB_ERR;
+        }
+        ret = fts_test_write_reg(FACTORY_REG_CB_ADDR_L, addr_l);
+        if (ret) {
+            FTS_TEST_SAVE_ERR("write cb addr low fail\n");
+            goto TEST_CB_ERR;
+        }
 
-		ret = fts_test_i2c_read(&cb_addr, 1, data + offset, read_num);
-		if (ret) {
-			FTS_TEST_SAVE_INFO("read cb fail\n");
-			goto TEST_CB_ERR;
-		}
-	}
+        ret = fts_test_read(cb_addr, data + offset, read_num);
+        if (ret) {
+            FTS_TEST_SAVE_ERR("read cb fail\n");
+            goto TEST_CB_ERR;
+        }
+    }
 
-	for (i = 0; i < byte_num; i++) {
-		cb_buf[i] = data[i];
-	}
+    for (i = 0; i < byte_num; i++) {
+        cb_buf[i] = data[i];
+    }
 
 TEST_CB_ERR:
-	fts_free(data);
-	return ret;
+    fts_free(data);
+    return ret;
+}
+
+int get_cb_sc(int byte_num, int *cb_buf, enum byte_mode mode)
+{
+    int ret = 0;
+    int i = 0;
+    int read_num = 0;
+    int packet_num = 0;
+    int packet_remainder = 0;
+    int offset = 0;
+    u8 cb_addr = 0;
+    u8 off_addr = 0;
+    struct fts_test *tdata = fts_ftest;
+    u8 *cb = NULL;
+
+    if ((NULL == tdata) || (NULL == tdata->func) ) {
+        FTS_TEST_ERROR("test/func is null\n");
+        return -EINVAL;
+    }
+
+    cb = (u8 *)fts_malloc(byte_num * sizeof(u8));
+    if (NULL == cb) {
+        FTS_TEST_SAVE_ERR("malloc memory for cb buffer fail\n");
+        return -ENOMEM;
+    }
+
+    if (IC_HW_MC_SC == tdata->func->hwtype) {
+        cb_addr = FACTORY_REG_MC_SC_CB_ADDR;
+        off_addr = FACTORY_REG_MC_SC_CB_ADDR_OFF;
+    } else if (IC_HW_SC == tdata->func->hwtype) {
+        cb_addr = FACTORY_REG_SC_CB_ADDR;
+        off_addr = FACTORY_REG_SC_CB_ADDR_OFF;
+    }
+
+    packet_num = byte_num / BYTES_PER_TIME;
+    packet_remainder = byte_num % BYTES_PER_TIME;
+    if (packet_remainder)
+        packet_num++;
+    read_num = BYTES_PER_TIME;
+    offset = 0;
+
+    FTS_TEST_INFO("cb packet:%d,remainder:%d", packet_num, packet_remainder);
+    for (i = 0; i < packet_num; i++) {
+        if ((i == (packet_num - 1)) && packet_remainder) {
+            read_num = packet_remainder;
+        }
+
+        ret = fts_test_write_reg(off_addr, offset);
+        if (ret < 0) {
+            FTS_TEST_SAVE_ERR("write cb addr offset fail\n");
+            goto cb_err;
+        }
+
+        ret = fts_test_read(cb_addr, cb + offset, read_num);
+        if (ret < 0) {
+            FTS_TEST_SAVE_ERR("read cb fail\n");
+            goto cb_err;
+        }
+
+        offset += read_num;
+    }
+
+    if (DATA_ONE_BYTE == mode) {
+        for (i = 0; i < byte_num; i++) {
+            cb_buf[i] = cb[i];
+        }
+    } else if (DATA_TWO_BYTE == mode) {
+        for (i = 0; i < byte_num; i = i + 2) {
+            cb_buf[i >> 1] = (int)(((int)(cb[i]) << 8) + cb[i + 1]);
+        }
+    }
+
+    ret = 0;
+cb_err:
+    fts_free(cb);
+    return ret;
+}
+
+bool compare_data(int *data, int min, int max, int min_vk, int max_vk, bool key)
+{
+    int i = 0;
+    bool result = true;
+    struct fts_test *tdata = fts_ftest;
+    int rx = tdata->node.rx_num;
+    int node_va = tdata->node.node_num - tdata->node.key_num;
+
+    if (!data || !tdata->node_valid) {
+        FTS_TEST_SAVE_ERR("data/node_valid is null\n");
+        return false;
+    }
+
+    for (i = 0; i < node_va; i++) {
+        if (0 == tdata->node_valid[i])
+            continue;
+
+        if ((data[i] < min) || (data[i] > max)) {
+            FTS_TEST_SAVE_ERR("test fail,node(%4d,%4d)=%5d,range=(%5d,%5d)\n",
+                              i / rx + 1, i % rx + 1, data[i], min, max);
+            result = false;
+        }
+    }
+
+    if (key) {
+        for (i = node_va; i < tdata->node.node_num; i++) {
+            if (0 == tdata->node_valid[i])
+                continue;
+
+            if ((data[i] < min_vk) || (data[i] > max_vk)) {
+                FTS_TEST_SAVE_ERR("test fail,node(%4d,%4d)=%5d,range=(%5d,%5d)\n",
+                                  i / rx + 1, i % rx + 1,
+                                  data[i], min_vk, max_vk);
+                result = false;
+            }
+        }
+    }
+
+    return result;
+}
+
+bool compare_array(int *data, int *min, int *max, bool key)
+{
+    int i = 0;
+    bool result = true;
+    struct fts_test *tdata = fts_ftest;
+    int rx = tdata->node.rx_num;
+    int node_num = tdata->node.node_num;
+
+    if (!data || !min || !max || !tdata->node_valid) {
+        FTS_TEST_SAVE_ERR("data/min/max/node_valid is null\n");
+        return false;
+    }
+
+    if (!key) {
+        node_num -= tdata->node.key_num;
+    }
+    for (i = 0; i < node_num; i++) {
+        if (0 == tdata->node_valid[i])
+            continue;
+
+        if ((data[i] < min[i]) || (data[i] > max[i])) {
+            FTS_TEST_SAVE_ERR("test fail,node(%4d,%4d)=%5d,range=(%5d,%5d)\n",
+                              i / rx + 1, i % rx + 1, data[i], min[i], max[i]);
+            result = false;
+        }
+    }
+
+    return result;
 }
 
 /*
- * weakshort_get_adc_data_incell - get short(adc) data for incell IC
+ * show_data - show and save test data to testresult.txt
  */
-int weakshort_get_adc_data_incell(u8 retval, u8 ch_num, int byte_num, int *adc_buf)
+void show_data(int *data, bool key)
 {
-	int ret = 0;
-	int times = 0;
-	u8 short_state = 0;
+    int i = 0;
+    int j = 0;
+    struct fts_test *tdata = fts_ftest;
+    int node_num = tdata->node.node_num;
+    int tx_num = tdata->node.tx_num;
+    int rx_num = tdata->node.rx_num;
 
-	FTS_TEST_FUNC_ENTER();
+    FTS_TEST_FUNC_ENTER();
+    for (i = 0; i < tx_num; i++) {
+        FTS_TEST_SAVE_INFO("Ch/Tx_%02d:  ", i + 1);
+        for (j = 0; j < rx_num; j++) {
+            FTS_TEST_SAVE_INFO("%5d, ", data[i * rx_num + j]);
+        }
+        FTS_TEST_SAVE_INFO("\n");
+    }
 
-	/* Start ADC sample */
-	ret = write_reg(FACTORY_REG_SHORT_TEST_EN, 0x01);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("start short test fail\n");
-		goto ADC_ERROR;
-	}
-	sys_delay(ch_num * FACTORY_TEST_DELAY);
-
-	for (times = 0; times < FACTORY_TEST_RETRY; times++) {
-		ret = read_reg(FACTORY_REG_SHORT_TEST_STATE, &short_state);
-		if ((0 == ret) && (retval == short_state))
-			break;
-		else
-			FTS_TEST_DBG("reg%x=%x,retry:%d", FACTORY_REG_SHORT_TEST_STATE, short_state, times);
-
-		sys_delay(FACTORY_TEST_RETRY_DELAY);
-	}
-	if (times >= FACTORY_TEST_RETRY) {
-		FTS_TEST_SAVE_INFO("short test timeout, ADC data not OK\n");
-		ret = -EIO;
-		goto ADC_ERROR;
-	}
-
-	ret = read_mass_data(FACTORY_REG_SHORT_ADDR, byte_num, adc_buf);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("get short(adc) data fail\n");
-	}
-
-ADC_ERROR:
-	FTS_TEST_FUNC_EXIT();
-	return ret;
-}
-
-/*
- * show_data_incell - show and save test data to testresult.txt
- */
-void show_data_incell(int *data, bool include_key)
-{
-	int row = 0;
-	int col = 0;
-	int tx_num = test_data.screen_param.tx_num;
-	int rx_num = test_data.screen_param.rx_num;
-	int key_num = test_data.screen_param.key_num_total;
-
-	FTS_TEST_SAVE_INFO("\nVA Channels: ");
-	for (row = 0; row < tx_num; row++) {
-		FTS_TEST_SAVE_INFO("\nCh_%02d:  ", row + 1);
-		for (col = 0; col < rx_num; col++) {
-			FTS_TEST_SAVE_INFO("%5d, ", data[row * rx_num + col]);
-		}
-	}
-
-	if (include_key) {
-		FTS_TEST_SAVE_INFO("\nKeys:   ");
-		for (col = 0; col < key_num; col++) {
-			FTS_TEST_SAVE_INFO("%5d, ", data[rx_num * tx_num + col]);
-		}
-		FTS_TEST_SAVE_INFO("\n");
-	}
-}
-
-/*
- * compare_data_incell - check data in range or not
- *
- * return true if check pass, or return false
- */
-bool compare_data_incell(int *data, int min, int max, int vk_min, int vk_max, bool include_key)
-{
-	int row = 0;
-	int col = 0;
-	int value = 0;
-	bool tmp_result = true;
-	int tx_num = test_data.screen_param.tx_num;
-	int rx_num = test_data.screen_param.rx_num;
-	int key_num = test_data.screen_param.key_num_total;
-
-	/* VA area */
-	for (row = 0; row < tx_num; row++) {
-		for (col = 0; col < rx_num; col++) {
-			if (0 == test_data.incell_detail_thr.invalid_node[row * rx_num + col])
-				continue;	/* Invalid Node */
-			value = data[row * rx_num + col];
-			if (value < min || value > max) {
-				tmp_result = false;
-				FTS_TEST_SAVE_INFO("test failure.Node=(%d, %d),Get_value=%d,Set_Range=(%d, %d)\n",
-										row + 1, col + 1, value, min, max);
-			}
-		}
-	}
-	/* Key area */
-	if (include_key) {
-		if (test_data.screen_param.key_flag) {
-			key_num = test_data.screen_param.key_num;
-		}
-		row = test_data.screen_param.tx_num;
-		for (col = 0; col < key_num; col++) {
-			if (0 == test_data.incell_detail_thr.invalid_node[tx_num * rx_num + col])
-				continue;	/* Invalid Node */
-			value = data[rx_num * tx_num + col];
-			if (value < vk_min || value > vk_max) {
-				tmp_result = false;
-				FTS_TEST_SAVE_INFO("test failure.Node=(%d, %d),Get_value=%d,Set_Range=(%d, %d)\n",
-										row + 1, col + 1, value, vk_min, vk_max);
-			}
-		}
-	}
-
-	return tmp_result;
-}
-
-/************************************************************************
-* Name: compare_detailthreshold_data_incell
-* Brief:  compare_detailthreshold_data_incell
-* Input: none
-* Output: none
-* Return: none.
-***********************************************************************/
-bool compare_detailthreshold_data_incell(int *data, int *data_min, int *data_max, bool include_key)
-{
-	int row, col;
-	int value;
-	bool tmp_result = true;
-	int tmp_min, tmp_max;
-	int rx_num = test_data.screen_param.rx_num;
-	int tx_num = test_data.screen_param.tx_num;
-	int key_num = test_data.screen_param.key_num_total;
-	/* VA */
-	for (row = 0; row < tx_num; row++) {
-		for (col = 0; col < rx_num; col++) {
-			if (test_data.incell_detail_thr.invalid_node[row * rx_num + col] == 0)
-				continue;	/* Invalid Node */
-			tmp_min = data_min[row * rx_num + col];
-			tmp_max = data_max[row * rx_num + col];
-			value = data[row * rx_num + col];
-			if (value < tmp_min || value > tmp_max) {
-				tmp_result = false;
-				FTS_TEST_SAVE_INFO
-				    (" \n test failure. Node=(%d,  %d), Get_value=%d,  Set_Range=(%d, %d)", row + 1,
-				     col + 1, value, tmp_min, tmp_max);
-			}
-		}
-	}
-	/* Key */
-	if (include_key) {
-		if (test_data.screen_param.key_flag) {
-			key_num = test_data.screen_param.key_num;
-		}
-		row = test_data.screen_param.tx_num;
-		for (col = 0; col < key_num; col++) {
-			if (test_data.incell_detail_thr.invalid_node[rx_num * tx_num + col] == 0)
-				continue;	/* Invalid Node */
-			tmp_min = data_min[rx_num * tx_num + col];
-			tmp_max = data_max[rx_num * tx_num + col];
-			value = data[rx_num * tx_num + col];
-			if (value < tmp_min || value > tmp_max) {
-				tmp_result = false;
-				FTS_TEST_SAVE_INFO
-				    (" \n test failure. Node=(%d,  %d), Get_value=%d,  Set_Range=(%d, %d)", row + 1,
-				     col + 1, value, tmp_min, tmp_max);
-			}
-		}
-	}
-
-	return tmp_result;
+    if (key) {
+        FTS_TEST_SAVE_INFO("Ch/Tx_%02d:  ", tx_num + 1);
+        for (i = tx_num * rx_num; i < node_num; i++) {
+            FTS_TEST_SAVE_INFO("%5d, ",  data[i]);
+        }
+        FTS_TEST_SAVE_INFO("\n");
+    }
+    FTS_TEST_FUNC_EXIT();
 }
 
 /*
  * save_testdata_incell - save data to testdata.csv
  */
-void save_testdata_incell(int *data, char *test_num, int index, u8 row, u8 col, u8 item_count)
+void save_data_csv(int *data, char *name, u8 code, bool mc_sc, bool key)
 {
-	int len = 0;
-	int i = 0, j = 0;
+#if CSV_SUPPORT
+    int i = 0;
+    int tx = 0;
+    int rx = 0;
+    int csv_node_num = 0;
+    struct fts_test *tdata = fts_ftest;
+    struct fts_test_node *node = NULL;
+    struct csv_format *csv = &tdata->csv;
 
-	FTS_TEST_FUNC_ENTER();
+    FTS_TEST_FUNC_ENTER();
+    if (!csv || !csv->line2_buffer || !csv->data_buffer) {
+        FTS_TEST_ERROR("csv buffer is null");
+        return;
+    }
 
-	/* Save Msg */
-	len =
-	    snprintf(test_data.tmp_buffer, BUFF_LEN_TMP_BUFFER, "%s, %d, %d, %d, %d, %d, ", test_num,
-		     test_data.test_item_code, row, col, test_data.start_line, item_count);
+    if (mc_sc) {
+        node = &tdata->sc_node;
+        tx = 2;
+    } else {
+        node = &tdata->node;
+        tx = node->tx_num;
+    }
+    if (key) {
+        tx++;
+    }
+    rx = node->rx_num;
+    csv_node_num = tx * rx;
 
-	memcpy(test_data.msg_area_line2 + test_data.len_msg_area_line2, test_data.tmp_buffer, len);
-	test_data.len_msg_area_line2 += len;
+    /* line 2 */
+    csv->line2_len += snprintf(csv->line2_buffer + csv->line2_len, \
+                               CSV_LINE2_BUFFER_LEN - csv->line2_len,
+                               "%s, %d, %d, %d, %d, %d, ", \
+                               name, code, tx, rx,
+                               csv->start_line, csv->item_count);
 
-	test_data.start_line += row;
-	test_data.test_data_count++;
+    if (csv->line2_len >= CSV_LINE2_BUFFER_LEN - 1) {
+        FTS_TEST_ERROR("csv line2 buffer length(%d) fail", csv->line2_len);
+    }
+    csv->start_line += tx;
+    csv->item_count++;
 
-	/* Save Data */
-	for (i = 0 + index; (i < row + index) && (i < TX_NUM_MAX); i++) {
-		for (j = 0; (j < col) && (j < RX_NUM_MAX); j++) {
-			if (j == (col - 1)) {
-				/* The Last Data of the row, add "\n" */
-				len =
-				    snprintf(test_data.tmp_buffer, BUFF_LEN_TMP_BUFFER, "%d, \n",
-					     data[col * (i + index) + j]);
-			} else {
-				len =
-				    snprintf(test_data.tmp_buffer, BUFF_LEN_TMP_BUFFER, "%d, ",
-					     data[col * (i + index) + j]);
-			}
+    /* test data */
+    for (i = 0; i < csv_node_num; i++) {
+        if (((i + 1) % rx) == 0) {
+            csv->data_len += snprintf(csv->data_buffer + csv->data_len, \
+                                      CSV_DATA_BUFFER_LEN - csv->data_len, \
+                                      "%d, \n", data[i]);
+        } else {
+            csv->data_len += snprintf(csv->data_buffer + csv->data_len, \
+                                      CSV_DATA_BUFFER_LEN - csv->data_len, \
+                                      "%d, ", data[i]);
+        }
 
-			memcpy(test_data.store_data_area + test_data.len_store_data_area, test_data.tmp_buffer, len);
-			test_data.len_store_data_area += len;
-		}
-	}
+        if (csv->data_len >= CSV_DATA_BUFFER_LEN - 1) {
+            FTS_TEST_ERROR("csv data buffer length(%d) fail", csv->data_len);
+        }
+    }
 
-	FTS_TEST_FUNC_EXIT();
+
+    FTS_TEST_FUNC_EXIT();
+#endif
 }
+
+
+/* mc_sc only */
+/* Only V3 Pattern has mapping & no-mapping */
+int mapping_switch(u8 mapping)
+{
+    int ret = 0;
+    u8 val = 0xFF;
+    struct fts_test *tdata = fts_ftest;
+
+    if (tdata->v3_pattern) {
+        ret = fts_test_read_reg(FACTORY_REG_NOMAPPING, &val);
+        if (ret < 0) {
+            FTS_TEST_ERROR("read 0x54 register fail");
+            return ret;
+        }
+
+        if (val != mapping) {
+            ret = fts_test_write_reg(FACTORY_REG_NOMAPPING, mapping);
+            if (ret < 0) {
+                FTS_TEST_ERROR("write 0x54 register fail");
+                return ret;
+            }
+            sys_delay(FACTORY_TEST_DELAY);
+        }
+    }
+
+    return 0;
+}
+
+bool get_fw_wp(u8 wp_ch_sel, enum wp_type water_proof_type)
+{
+    bool fw_wp_state = false;
+
+    switch (water_proof_type) {
+    case WATER_PROOF_ON:
+        /* bit5: 0-check in wp on, 1-not check */
+        fw_wp_state = !(wp_ch_sel & 0x20);
+        break;
+    case WATER_PROOF_ON_TX:
+        /* Bit6:  0-check Rx+Tx in wp mode  1-check one channel
+           Bit2:  0-check Tx in wp mode;  1-check Rx in wp mode
+        */
+        fw_wp_state = (!(wp_ch_sel & 0x40) || !(wp_ch_sel & 0x04));
+        break;
+    case WATER_PROOF_ON_RX:
+        fw_wp_state = (!(wp_ch_sel & 0x40) || (wp_ch_sel & 0x04));
+        break;
+    case WATER_PROOF_OFF:
+        /* bit7: 0-check in wp off, 1-not check */
+        fw_wp_state = !(wp_ch_sel & 0x80);
+        break;
+    case WATER_PROOF_OFF_TX:
+        /* Bit1-0:  00-check Tx in non-wp mode
+                    01-check Rx in non-wp mode
+                    10:check Rx+Tx in non-wp mode
+        */
+        fw_wp_state = ((0x0 == (wp_ch_sel & 0x03)) || (0x02 == (wp_ch_sel & 0x03)));
+        break;
+    case WATER_PROOF_OFF_RX:
+        fw_wp_state = ((0x01 == (wp_ch_sel & 0x03)) || (0x02 == (wp_ch_sel & 0x03)));
+        break;
+    default:
+        break;
+    }
+
+    return fw_wp_state;
+}
+
+int get_cb_mc_sc(u8 wp, int byte_num, int *cb_buf, enum byte_mode mode)
+{
+    int ret = 0;
+
+    /* 1:waterproof 0:non-waterproof */
+    ret = fts_test_write_reg(FACTORY_REG_MC_SC_MODE, wp);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("get mc_sc mode fail\n");
+        return ret;
+    }
+
+    /* read cb */
+    ret = get_cb_sc(byte_num, cb_buf, mode);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("get sc cb fail\n");
+        return ret;
+    }
+
+    return 0;
+}
+
+int get_rawdata_mc_sc(enum wp_type wp, int *data)
+{
+    int ret = 0;
+    u8 val = 0;
+    u8 addr = 0;
+    u8 rawdata_addr = 0;
+    int byte_num = 0;
+    struct fts_test *tdata = fts_ftest;
+
+    if ((NULL == tdata) || (NULL == tdata->func) ) {
+        FTS_TEST_ERROR("test/func is null\n");
+        return -EINVAL;
+    }
+
+    addr = FACTORY_REG_LINE_ADDR;
+    rawdata_addr = FACTORY_REG_RAWDATA_ADDR_MC_SC;
+    if (WATER_PROOF_ON == wp) {
+        val = 0xAC;
+    } else {
+        val = 0xAB;
+    }
+
+    byte_num = tdata->sc_node.node_num * 2;
+    ret = read_rawdata(addr, val, rawdata_addr, byte_num, data);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("read rawdata fail\n");
+        return ret;
+    }
+
+    return 0;
+}
+
+int get_rawdata_mc(u8 fre, u8 fir, int *rawdata)
+{
+    int ret = 0;
+    int i = 0;
+
+    if (NULL == rawdata ) {
+        FTS_TEST_SAVE_ERR("rawdata buffer is null\n");
+        return -EINVAL;
+    }
+
+    /* set frequecy high/low */
+    ret = fts_test_write_reg(FACTORY_REG_FRE_LIST, fre);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("set frequecy fail,ret=%d\n", ret);
+        return ret;
+    }
+
+    /* fir enable/disable */
+    ret = fts_test_write_reg(FACTORY_REG_FIR, 1);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("set fir fail,ret=%d\n", fir);
+        return ret;
+    }
+
+    /* get rawdata */
+    for (i = 0; i < 3; i++) {
+        /* lost 3 frames, in order to obtain stable data */
+        ret = get_rawdata(rawdata);
+    }
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("get rawdata fail,ret=%d\n", ret);
+        return ret;
+    }
+
+    return 0;
+}
+
+void short_print_mc(int *r, int num)
+{
+    int i = 0;
+
+    for (i = 0; i < num; i++) {
+        printk("%4d ", r[i]);
+    }
+
+    printk("\n");
+}
+
+int short_get_adc_data_mc(u8 retval, int byte_num, int *adc_buf, u8 mode)
+{
+    int ret = 0;
+    int i = 0;
+    u8 short_state = 0;
+
+    FTS_TEST_FUNC_ENTER();
+    /* select short test mode & start test */
+    ret = fts_test_write_reg(FACTROY_REG_SHORT_TEST_EN, mode);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("write short test mode fail\n");
+        goto test_err;
+    }
+
+    for (i = 0; i < FACTORY_TEST_RETRY; i++) {
+        sys_delay(FACTORY_TEST_RETRY_DELAY);
+
+        ret = fts_test_read_reg(FACTROY_REG_SHORT_TEST_EN, &short_state);
+        if ((ret >= 0) && (retval == short_state))
+            break;
+        else
+            FTS_TEST_DBG("reg%x=%x,retry:%d",
+                         FACTROY_REG_SHORT_TEST_EN, short_state, i);
+    }
+    if (i >= FACTORY_TEST_RETRY) {
+        FTS_TEST_SAVE_ERR("short test timeout, ADC data not OK\n");
+        ret = -EIO;
+        goto test_err;
+    }
+
+    ret = read_mass_data(FACTORY_REG_SHORT_ADDR_MC, byte_num, adc_buf);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("get short(adc) data fail\n");
+    }
+
+    FTS_TEST_DBG("adc data:\n");
+    short_print_mc(adc_buf, byte_num / 2);
+test_err:
+    FTS_TEST_FUNC_EXIT();
+    return ret;
+}
+
+bool compare_mc_sc(bool tx_check, bool rx_check, int *data, int *min, int *max)
+{
+    int i = 0;
+    bool result = true;
+    struct fts_test *tdata = fts_ftest;
+
+    if (rx_check) {
+        for (i = 0; i < tdata->sc_node.rx_num; i++) {
+            if (0 == tdata->node_valid_sc[i])
+                continue;
+
+            if ((data[i] < min[i]) || (data[i] > max[i])) {
+                FTS_TEST_SAVE_ERR("test fail,rx%d=%5d,range=(%5d,%5d)\n",
+                                  i + 1, data[i], min[i], max[i]);
+                result = false;
+            }
+        }
+    }
+
+    if (tx_check) {
+        for (i = tdata->sc_node.rx_num; i < tdata->sc_node.node_num; i++) {
+            if (0 == tdata->node_valid_sc[i])
+                continue;
+
+            if ((data[i] < min[i]) || (data[i] > max[i])) {
+                FTS_TEST_SAVE_INFO("test fail,tx%d=%5d,range=(%5d,%5d)\n",
+                                   i - tdata->sc_node.rx_num + 1,
+                                   data[i], min[i], max[i]);
+                result = false;
+            }
+        }
+    }
+
+    return result;
+}
+
+void show_data_mc_sc(int *data)
+{
+    int i = 0;
+    struct fts_test *tdata = fts_ftest;
+
+    FTS_TEST_SAVE_INFO("SCap Rx: ");
+    for (i = 0; i < tdata->sc_node.rx_num; i++) {
+        FTS_TEST_SAVE_INFO( "%5d, ", data[i]);
+    }
+    FTS_TEST_SAVE_INFO("\n");
+
+    FTS_TEST_SAVE_INFO("SCap Tx: ");
+    for (i = tdata->sc_node.rx_num; i < tdata->sc_node.node_num; i++) {
+        FTS_TEST_SAVE_INFO( "%5d, ", data[i]);
+    }
+    FTS_TEST_SAVE_INFO("\n");
+}
+/* mc_sc end*/
 
 /*
- * fts_ic_table_get_ic_code_from_ic_name - get ic code from ic name
+ * fts_test_save_test_data - Save test data to SD card etc.
  */
-u32 fts_ic_table_get_ic_code_from_ic_name(char *ic_name)
+static int fts_test_save_test_data(char *file_name, char *data_buf, int len)
 {
-	int i = 0;
-	int type_size = 0;
+    struct file *pfile = NULL;
+    char filepath[128];
+    loff_t pos;
+    mm_segment_t old_fs;
 
-	type_size = sizeof(ic_types) / sizeof(ic_types[0]);
-	for (i = 0; i < type_size; i++) {
-		if (0 == strncmp(ic_name, ic_types[i].ic_name, ic_types[i].len))
-			return ic_types[i].ic_type;
-	}
+    FTS_TEST_FUNC_ENTER();
+    memset(filepath, 0, sizeof(filepath));
+    sprintf(filepath, "%s%s", FTS_INI_FILE_PATH, file_name);
+    if (NULL == pfile) {
+        pfile = filp_open(filepath, O_TRUNC | O_CREAT | O_RDWR, 0);
+    }
+    if (IS_ERR(pfile)) {
+        FTS_TEST_ERROR("error occured while opening file %s.",  filepath);
+        return -EIO;
+    }
 
-	FTS_TEST_ERROR("no IC type match");
-	return 0;
+    old_fs = get_fs();
+    set_fs(KERNEL_DS);
+    pos = 0;
+    vfs_write(pfile, data_buf, len, &pos);
+    filp_close(pfile, NULL);
+    set_fs(old_fs);
+
+    FTS_TEST_FUNC_EXIT();
+    return 0;
 }
 
-/*
- * init_test_funcs - get test function based on ic_type
- */
-int init_test_funcs(u32 ic_type)
+static int fts_test_malloc_free_data_csv(struct fts_test *tdata, bool allocate)
 {
-	int i = 0;
-	struct test_funcs *funcs = test_funcs_list[0];
-	int funcs_len = sizeof(test_funcs_list) / sizeof(test_funcs_list[0]);
-	u32 ic_series = 0;
+#if CSV_SUPPORT
+    struct csv_format *csv = &tdata->csv;
 
-	ic_series = TEST_ICSERIES(ic_type);
-	FTS_TEST_INFO("ic_type:%x, test functions len:%x", ic_type, funcs_len);
-	for (i = 0; i < funcs_len; i++) {
-		funcs = test_funcs_list[i];
-		if (ic_series == funcs->ic_series) {
-			test_data.func = funcs;
-			break;
-		}
-	}
+    if (true == allocate) {
+        csv->buffer = vmalloc(CSV_BUFFER_LEN);
+        if (NULL == csv->buffer) {
+            FTS_TEST_ERROR("csv->buffer malloc fail\n");
+            return -ENOMEM;
+        }
+        csv->line2_buffer = vmalloc(CSV_LINE2_BUFFER_LEN);
+        if (NULL == csv->line2_buffer) {
+            FTS_TEST_ERROR("csv->line2_buffer malloc fail\n");
+            return -ENOMEM;
+        }
+        csv->data_buffer = vmalloc(CSV_DATA_BUFFER_LEN);
+        if (NULL == csv->data_buffer) {
+            FTS_TEST_ERROR("csv->data_buffer malloc fail\n");
+            return -ENOMEM;
+        }
 
-	if (i >= funcs_len) {
-		FTS_TEST_ERROR("no ic serial function match");
-		return -ENODATA;
-	}
+        /* initialize variable */
+        csv->length = 0;
+        csv->line2_len = 0;
+        csv->data_len = 0;
+        csv->start_line = 11;
+        csv->item_count = 1;
 
-	return 0;
+    } else {
+        if (csv->buffer) {
+            vfree(csv->buffer);
+            csv->buffer = NULL;
+        }
+        if (csv->line2_buffer) {
+            vfree(csv->line2_buffer);
+            csv->line2_buffer = NULL;
+        }
+        if (csv->data_buffer) {
+            vfree(csv->data_buffer);
+            csv->data_buffer = NULL;
+        }
+    }
+#endif
+
+    return 0;
 }
 
-/************************************************************************
-* Name: fts_set_testitem
-* Brief:  set test item code and name
-* Input: null
-* Output: null
-* Return:
-**********************************************************************/
-void fts_set_testitem(u8 itemcode)
+static int fts_test_malloc_free_data_txt(struct fts_test *tdata, bool allocate)
 {
-	test_data.test_item[test_data.test_num].itemcode = itemcode;
-	test_data.test_item[test_data.test_num].testnum = test_data.test_num;
-	test_data.test_item[test_data.test_num].testresult = RESULT_NULL;
-	test_data.test_num++;
+    if (true == allocate) {
+        tdata->testresult = vmalloc(TXT_BUFFER_LEN);
+        if (NULL == tdata->testresult) {
+            FTS_TEST_ERROR("tdata->testresult malloc fail\n");
+            return -ENOMEM;
+        }
+
+        tdata->testresult_len = 0;
+        FTS_TEST_SAVE_INFO("FW version:0x%02x\n", tdata->fw_ver);
+        FTS_TEST_SAVE_INFO("tx_num:%d, rx_num:%d\n",
+                           tdata->node.tx_num, tdata->node.rx_num);
+    } else {
+        if (tdata->testresult) {
+            vfree(tdata->testresult);
+            tdata->testresult = NULL;
+        }
+    }
+
+    return 0;
 }
 
-
-void init_storeparam_testdata(void)
+static void fts_test_save_data_csv(struct fts_test *tdata)
 {
-	test_data.testresult_len = 0;
+#if CSV_SUPPORT
+    struct csv_format *csv = &tdata->csv;
 
-	test_data.len_store_msg_area = 0;
-	test_data.len_msg_area_line2 = 0;
-	test_data.len_store_data_area = 0;
-	/* The Start Line of Data Area is 11 */
-	test_data.start_line = 11;
-	test_data.test_data_count = 0;
+    if (!csv || !csv->buffer || !csv->line2_buffer || !csv->data_buffer) {
+        FTS_TEST_ERROR("csv buffer is null");
+        return;
+    }
+
+    /* line 1 */
+    csv->length += snprintf(csv->buffer + csv->length, \
+                            CSV_BUFFER_LEN - csv->length, \
+                            "ECC, 85, 170, IC Name, %s, IC Code, %x\n", \
+                            tdata->ini.ic_name, \
+                            (tdata->ini.ic_code >> IC_CODE_OFFSET));
+
+    /* line 2 */
+    csv->length += snprintf(csv->buffer + csv->length, \
+                            CSV_BUFFER_LEN - csv->length, \
+                            "TestItem Num, %d, ", \
+                            csv->item_count);
+    if (csv->line2_len > 0) {
+        memcpy(csv->buffer + csv->length, csv->line2_buffer, csv->line2_len);
+        csv->length += csv->line2_len;
+    }
+
+    /* line 3 ~ 10  "\n" */
+    csv->length += snprintf(csv->buffer + csv->length, \
+                            CSV_BUFFER_LEN - csv->length, \
+                            "\n\n\n\n\n\n\n\n\n");
+
+    /* line 11 ~ data area */
+    if (csv->data_len > 0) {
+        memcpy(csv->buffer + csv->length, csv->data_buffer, csv->data_len);
+        csv->length += csv->data_len;
+    }
+
+    FTS_TEST_INFO("csv length:%d", csv->length);
+    fts_test_save_test_data(FTS_CSV_FILE_NAME, csv->buffer, csv->length);
+#endif
 }
 
-int allocate_init_testdata_memory(void)
+static void fts_test_save_result_txt(struct fts_test *tdata)
 {
-	test_data.testresult = fts_malloc(BUFF_LEN_TESTRESULT_BUFFER);
-	if (NULL == test_data.testresult)
-		goto ERR;
+    if (!tdata || !tdata->testresult) {
+        FTS_TEST_ERROR("test result is null");
+        return;
+    }
 
-	test_data.store_all_data = fts_malloc(FTS_TEST_STORE_DATA_SIZE);
-	if (NULL == test_data.store_all_data)
-		goto ERR;
-
-	test_data.store_msg_area = fts_malloc(BUFF_LEN_STORE_MSG_AREA);
-	if (NULL == test_data.store_msg_area)
-		goto ERR;
-
-	test_data.msg_area_line2 = fts_malloc(BUFF_LEN_MSG_AREA_LINE2);
-	if (NULL == test_data.msg_area_line2)
-		goto ERR;
-
-	test_data.store_data_area = fts_malloc(BUFF_LEN_STORE_DATA_AREA);
-	if (NULL == test_data.store_data_area)
-		goto ERR;
-
-	test_data.tmp_buffer = fts_malloc(BUFF_LEN_TMP_BUFFER);
-	if (NULL == test_data.tmp_buffer)
-		goto ERR;
-
-	init_storeparam_testdata();
-	return 0;
-ERR:
-	FTS_TEST_ERROR("fts_malloc memory failed in function.");
-	return -ENOMEM;
+    FTS_TEST_INFO("test result length in txt:%d", tdata->testresult_len);
+    fts_test_save_test_data(FTS_TXT_FILE_NAME, tdata->testresult, tdata->testresult_len);
 }
 
-/************************************************************************
-* Name: free_testdata_memory
-* Brief:  Release pointer memory
-* Input: none
-* Output: none
-* Return: none
-***********************************************************************/
-void free_testdata_memory(void)
+static int fts_test_malloc_free_incell(struct fts_test *tdata, bool allocate)
 {
-	/* free buff */
-	if (NULL != test_data.testresult)
-		fts_free(test_data.testresult);
+    struct incell_threshold *thr = &tdata->ic.incell.thr;
+    int buflen = tdata->node.node_num * sizeof(int);
 
-	if (NULL != test_data.store_all_data)
-		fts_free(test_data.store_all_data);
+    if (true == allocate) {
+        FTS_TEST_INFO("buflen:%d", buflen);
+        fts_malloc_r(thr->rawdata_min, buflen);
+        fts_malloc_r(thr->rawdata_max, buflen);
+        if (tdata->func->rawdata2_support) {
+            fts_malloc_r(thr->rawdata2_min, buflen);
+            fts_malloc_r(thr->rawdata2_max, buflen);
+        }
+        fts_malloc_r(thr->cb_min, buflen);
+        fts_malloc_r(thr->cb_max, buflen);
+    } else {
+        fts_free(thr->rawdata_min);
+        fts_free(thr->rawdata_max);
+        if (tdata->func->rawdata2_support) {
+            fts_free(thr->rawdata2_min);
+            fts_free(thr->rawdata2_max);
+        }
+        fts_free(thr->cb_min);
+        fts_free(thr->cb_max);
+    }
 
-	if (NULL != test_data.store_msg_area)
-		fts_free(test_data.store_msg_area);
-
-	if (NULL != test_data.msg_area_line2)
-		fts_free(test_data.msg_area_line2);
-
-	if (NULL != test_data.store_data_area)
-		fts_free(test_data.store_data_area);
-
-	if (NULL != test_data.tmp_buffer)
-		fts_free(test_data.tmp_buffer);
-
+    return 0;
 }
 
-int get_tx_rx_num(u8 tx_rx_reg, u8 *ch_num, u8 ch_num_max)
+static int fts_test_malloc_free_mc_sc(struct fts_test *tdata, bool allocate)
 {
-	int ret = 0;
-	int i = 0;
+    struct mc_sc_threshold *thr = &tdata->ic.mc_sc.thr;
+    int buflen = tdata->node.node_num * sizeof(int);
+    int buflen_sc = tdata->sc_node.node_num * sizeof(int);
 
-	for (i = 0; i < 3; i++) {
-		ret = read_reg(tx_rx_reg, ch_num);
-		if ((ret < 0) || (*ch_num > ch_num_max)) {
-			sys_delay(50);
-		} else
-			break;
-	}
+    if (true == allocate) {
+        fts_malloc_r(thr->rawdata_h_min, buflen);
+        fts_malloc_r(thr->rawdata_h_max, buflen);
+        if (tdata->func->rawdata2_support) {
+            fts_malloc_r(thr->rawdata_l_min, buflen);
+            fts_malloc_r(thr->rawdata_l_max, buflen);
+        }
+        fts_malloc_r(thr->tx_linearity_max, buflen);
+        fts_malloc_r(thr->tx_linearity_min, buflen);
+        fts_malloc_r(thr->rx_linearity_max, buflen);
+        fts_malloc_r(thr->rx_linearity_min, buflen);
 
-	if (i >= 3) {
-		FTS_TEST_ERROR("get channel num fail");
-		return -EIO;
-	}
+        fts_malloc_r(thr->scap_cb_off_min, buflen_sc);
+        fts_malloc_r(thr->scap_cb_off_max, buflen_sc);
+        fts_malloc_r(thr->scap_cb_on_min, buflen_sc);
+        fts_malloc_r(thr->scap_cb_on_max, buflen_sc);
 
-	return 0;
+        fts_malloc_r(thr->scap_rawdata_off_min, buflen_sc);
+        fts_malloc_r(thr->scap_rawdata_off_max, buflen_sc);
+        fts_malloc_r(thr->scap_rawdata_on_min, buflen_sc);
+        fts_malloc_r(thr->scap_rawdata_on_max, buflen_sc);
+
+        fts_malloc_r(thr->panel_differ_min, buflen);
+        fts_malloc_r(thr->panel_differ_max, buflen);
+    } else {
+        fts_free(thr->rawdata_h_min);
+        fts_free(thr->rawdata_h_max);
+        if (tdata->func->rawdata2_support) {
+            fts_free(thr->rawdata_l_min);
+            fts_free(thr->rawdata_l_max);
+        }
+        fts_free(thr->tx_linearity_max);
+        fts_free(thr->tx_linearity_min);
+        fts_free(thr->rx_linearity_max);
+        fts_free(thr->rx_linearity_min);
+
+        fts_free(thr->scap_cb_off_min);
+        fts_free(thr->scap_cb_off_max);
+        fts_free(thr->scap_cb_on_min);
+        fts_free(thr->scap_cb_on_max);
+
+        fts_free(thr->scap_rawdata_off_min);
+        fts_free(thr->scap_rawdata_off_max);
+        fts_free(thr->scap_rawdata_on_min);
+        fts_free(thr->scap_rawdata_on_max);
+
+        fts_free(thr->panel_differ_min);
+        fts_free(thr->panel_differ_max);
+    }
+
+    return 0;
 }
 
-static int get_channel_num(void)
+static int fts_test_malloc_free_sc(struct fts_test *tdata, bool allocate)
 {
-	int ret = 0;
-	u8 tx_num = 0;
-	u8 rx_num = 0;
+    struct sc_threshold *thr = &tdata->ic.sc.thr;
+    int buflen = tdata->node.node_num * sizeof(int);
 
-	FTS_TEST_FUNC_ENTER();
+    if (true == allocate) {
+        fts_malloc_r(thr->rawdata_min, buflen);
+        fts_malloc_r(thr->rawdata_max, buflen);
+        fts_malloc_r(thr->cb_min, buflen);
+        fts_malloc_r(thr->cb_max, buflen);
+        fts_malloc_r(thr->dcb_sort, buflen);
+        fts_malloc_r(thr->dcb_base, buflen);
+    } else {
+        fts_free(thr->rawdata_min);
+        fts_free(thr->rawdata_max);
+        fts_free(thr->cb_min);
+        fts_free(thr->cb_max);
+        fts_free(thr->dcb_sort);
+        fts_free(thr->dcb_base);
+    }
 
-	ret = enter_factory_mode();
-	if (ret < 0) {
-		FTS_TEST_ERROR("enter factory mode fail, can't get tx/rx num");
-		return ret;
-	}
-
-	test_data.screen_param.used_max_tx_num = TX_NUM_MAX;
-	test_data.screen_param.used_max_rx_num = RX_NUM_MAX;
-	test_data.screen_param.key_num_total = KEY_NUM_MAX;
-	ret = get_tx_rx_num(FACTORY_REG_CHX_NUM, &tx_num, TX_NUM_MAX);
-	if (ret < 0) {
-		FTS_TEST_ERROR("get tx_num fail");
-		return ret;
-	}
-
-	ret = get_tx_rx_num(FACTORY_REG_CHY_NUM, &rx_num, RX_NUM_MAX);
-	if (ret < 0) {
-		FTS_TEST_ERROR("get rx_num fail");
-		return ret;
-	}
-
-	test_data.screen_param.tx_num = (int)tx_num;
-	test_data.screen_param.rx_num = (int)rx_num;
-	test_data.screen_param.used_max_tx_num = tx_num + KEY_NUM_MAX;
-	test_data.screen_param.used_max_rx_num = rx_num + KEY_NUM_MAX;
-
-	FTS_TEST_INFO("TxNum=%d, RxNum=%d, MaxTxNum=%d, MaxRxNum=%d",
-		      test_data.screen_param.tx_num, test_data.screen_param.rx_num,
-		      test_data.screen_param.used_max_tx_num, test_data.screen_param.used_max_rx_num);
-
-	FTS_TEST_FUNC_EXIT();
-	return 0;
+    return 0;
 }
 
-static int fts_test_init_basicinfo(void)
+static int fts_test_malloc_free_thr(struct fts_test *tdata, bool allocate)
 {
-	int ret = 0;
-	u8 val = 0;
+    int ret = 0;
 
-	FTS_TEST_SAVE_INFO("FTS TESTCODE VERSION:%s\n", IC_TEST_VERSION);
+    if ((NULL == tdata) || (NULL == tdata->func)) {
+        FTS_TEST_SAVE_ERR("tdata/func is NULL\n");
+        return -EINVAL;
+    }
 
-	ret = read_reg(REG_FW_VERSION, &val);
-	FTS_TEST_SAVE_INFO("FW version:0x%02x\n", val);
+    if (true == allocate) {
+        fts_malloc_r(tdata->node_valid, tdata->node.node_num * sizeof(int));
+        fts_malloc_r(tdata->node_valid_sc, tdata->sc_node.node_num * sizeof(int));
+    } else {
+        fts_free(tdata->node_valid);
+        fts_free(tdata->node_valid_sc);
+    }
 
-	ret = read_reg(REG_VA_TOUCH_THR, &val);
-	test_data.va_touch_thr = val;
-	ret = read_reg(REG_VKEY_TOUCH_THR, &val);
-	test_data.key_touch_thr = val;
+    switch (tdata->func->hwtype) {
+    case IC_HW_INCELL:
+        ret = fts_test_malloc_free_incell(tdata, allocate);
+        break;
+    case IC_HW_MC_SC:
+        ret = fts_test_malloc_free_mc_sc(tdata, allocate);
+        break;
+    case IC_HW_SC:
+        ret = fts_test_malloc_free_sc(tdata, allocate);
+        break;
+    default:
+        FTS_TEST_SAVE_ERR("test ic type(%d) fail\n", tdata->func->hwtype);
+        ret = -EINVAL;
+        break;
+    }
 
-	/* enter into factory mode and read tx/rx num */
-	ret = get_channel_num();
-	FTS_TEST_SAVE_INFO("tx_num:%d, rx_num:%d\n", test_data.screen_param.tx_num, test_data.screen_param.rx_num);
+    return ret;
+}
 
-	return ret;
+/* default enable all test item */
+static void fts_test_init_item(struct fts_test *tdata)
+{
+    switch (tdata->func->hwtype) {
+    case IC_HW_INCELL:
+        tdata->ic.incell.u.tmp = 0xFFFFFFFF;
+        break;
+    case IC_HW_MC_SC:
+        tdata->ic.mc_sc.u.tmp = 0xFFFFFFFF;
+        break;
+    case IC_HW_SC:
+        tdata->ic.sc.u.tmp = 0xFFFFFFFF;
+        break;
+    }
+}
+
+static int get_tx_rx_num(u8 tx_rx_reg, u8 *ch_num, u8 ch_num_max)
+{
+    int ret = 0;
+    int i = 0;
+
+    for (i = 0; i < 3; i++) {
+        ret = fts_test_read_reg(tx_rx_reg, ch_num);
+        if ((ret < 0) || (*ch_num > ch_num_max)) {
+            sys_delay(50);
+        } else
+            break;
+    }
+
+    if (i >= 3) {
+        FTS_TEST_ERROR("get channel num fail");
+        return -EIO;
+    }
+
+    return 0;
+}
+
+static int get_channel_num(struct fts_test *tdata)
+{
+    int ret = 0;
+    u8 tx_num = 0;
+    u8 rx_num = 0;
+    int key_num = 0;
+
+    /* node structure */
+    if (IC_HW_SC == tdata->func->hwtype) {
+        ret = get_tx_rx_num(FACTORY_REG_CH_NUM_SC, &tx_num, NUM_MAX_SC);
+        if (ret < 0) {
+            FTS_TEST_ERROR("get channel number fail");
+            return ret;
+        }
+
+        ret = get_tx_rx_num(FACTORY_REG_KEY_NUM_SC, &rx_num, KEY_NUM_MAX);
+        if (ret < 0) {
+            FTS_TEST_ERROR("get key number fail");
+            return ret;
+        }
+
+        tdata->node.tx_num = 2;
+        tdata->node.rx_num = tx_num / 2;
+        tdata->node.channel_num = tx_num;
+        tdata->node.node_num = tx_num;
+        key_num = rx_num;
+    } else {
+        ret = get_tx_rx_num(FACTORY_REG_CHX_NUM, &tx_num, TX_NUM_MAX);
+        if (ret < 0) {
+            FTS_TEST_ERROR("get tx_num fail");
+            return ret;
+        }
+
+        ret = get_tx_rx_num(FACTORY_REG_CHY_NUM, &rx_num, RX_NUM_MAX);
+        if (ret < 0) {
+            FTS_TEST_ERROR("get rx_num fail");
+            return ret;
+        }
+
+        tdata->node.tx_num = tx_num;
+        tdata->node.rx_num = rx_num;
+        if (IC_HW_INCELL == tdata->func->hwtype)
+            tdata->node.channel_num = tx_num * rx_num;
+        else if (IC_HW_MC_SC == tdata->func->hwtype)
+            tdata->node.channel_num = tx_num + rx_num;
+        tdata->node.node_num = tx_num * rx_num;
+        key_num = tdata->func->key_num_total;
+    }
+
+    /* key */
+    tdata->node.key_num = key_num;
+    tdata->node.node_num += tdata->node.key_num;
+
+    /* sc node structure */
+    tdata->sc_node = tdata->node;
+    if (IC_HW_MC_SC == tdata->func->hwtype) {
+        if (tdata->v3_pattern) {
+            ret = get_tx_rx_num(FACTORY_REG_CHX_NUM_NOMAP, &tx_num, TX_NUM_MAX);
+            if (ret < 0) {
+                FTS_TEST_ERROR("get no-mappint tx_num fail");
+                return ret;
+            }
+
+            ret = get_tx_rx_num(FACTORY_REG_CHY_NUM_NOMAP, &rx_num, TX_NUM_MAX);
+            if (ret < 0) {
+                FTS_TEST_ERROR("get no-mapping rx_num fail");
+                return ret;
+            }
+
+            tdata->sc_node.tx_num = tx_num;
+            tdata->sc_node.rx_num = rx_num;
+        }
+        tdata->sc_node.channel_num = tx_num + rx_num;
+        tdata->sc_node.node_num = tx_num + rx_num;
+    }
+
+    if (tdata->node.tx_num > TX_NUM_MAX) {
+        FTS_TEST_ERROR("tx num(%d) fail", tdata->node.tx_num);
+        return -EIO;
+    }
+
+    if (tdata->node.rx_num > RX_NUM_MAX) {
+        FTS_TEST_ERROR("rx num(%d) fail", tdata->node.rx_num);
+        return -EIO;
+    }
+
+    FTS_TEST_INFO("node_num:%d, tx:%d, rx:%d", tdata->node.node_num,
+                  tdata->node.tx_num, tdata->node.rx_num);
+    return 0;
+}
+
+static void get_ic_version(struct fts_test *tdata)
+{
+    u8 val[4] = { 0 };
+
+    fts_test_read_reg(REG_FW_CHIP_IDH, &val[0]);
+    fts_test_read_reg(REG_FW_CHIP_IDL, &val[1]);
+    fts_test_read_reg(REG_FW_IC_TYPE, &val[2]);
+    fts_test_read_reg(REG_FW_IC_VERSION, &val[3]);
+
+    tdata->ic_ver = TEST_IC_VERSION(val[0], val[1], val[2], val[3]);
+    FTS_TEST_INFO("test ic version:0x%8x", tdata->ic_ver);
+}
+
+static int fts_test_init_basicinfo(struct fts_test *tdata)
+{
+    int ret = 0;
+    u8 val = 0;
+
+    if ((NULL == tdata) || (NULL == tdata->func)) {
+        FTS_TEST_SAVE_ERR("tdata/func is NULL\n");
+        return -EINVAL;
+    }
+
+    get_ic_version(tdata);
+
+    fts_test_read_reg(REG_FW_VERSION, &val);
+    tdata->fw_ver = val;
+
+    if (IC_HW_INCELL == tdata->func->hwtype) {
+        fts_test_read_reg(REG_VA_TOUCH_THR, &val);
+        tdata->va_touch_thr = val;
+        fts_test_read_reg(REG_VKEY_TOUCH_THR, &val);
+        tdata->vk_touch_thr = val;
+    }
+
+    /* enter factory mode */
+    ret = enter_factory_mode();
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("enter factory mode fail\n");
+        return ret;
+    }
+
+    if (IC_HW_MC_SC == tdata->func->hwtype) {
+        fts_test_read_reg(FACTORY_REG_PATTERN, &val);
+        tdata->v3_pattern = (1 == val) ? true : false;
+        fts_test_read_reg(FACTORY_REG_NOMAPPING, &val);
+        tdata->mapping = val;
+    }
+
+    /* enter into factory mode and read tx/rx num */
+    ret = get_channel_num(tdata);
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("get channel number fail\n");
+        return ret;
+    }
+
+    return ret;
 }
 
 static int fts_test_main_init(void)
 {
-	int ret = 0;
-	int len = 0;
+    int ret = 0;
+    struct fts_test *tdata = fts_ftest;
 
-	FTS_TEST_FUNC_ENTER();
-	/* allocate memory for test data:csv&txt */
-	ret = allocate_init_testdata_memory();
-	if (ret < 0) {
-		FTS_TEST_ERROR("allocate memory for test data fail");
-		return ret;
-	}
+    FTS_TEST_FUNC_ENTER();
+    /* get basic information: tx/rx num ... */
+    ret = fts_test_init_basicinfo(tdata);
+    if (ret < 0) {
+        FTS_TEST_ERROR("test init basicinfo fail");
+        return ret;
+    }
 
-	/* get basic information: tx/rx num */
-	ret = fts_test_init_basicinfo();
-	if (ret < 0) {
-		FTS_TEST_ERROR("test init basicinfo fail");
-		return ret;
-	}
+    /* allocate memory for test threshold */
+    ret = fts_test_malloc_free_thr(tdata, true);
+    if (ret < 0) {
+        FTS_TEST_ERROR("test malloc for threshold fail");
+        return ret;
+    }
 
-	/* Allocate memory for detail threshold structure */
-	ret = malloc_struct_DetailThreshold();
-	if (ret < 0) {
-		FTS_TEST_ERROR("Failed to malloc memory for detaithreshold");
-		return ret;
-	}
+    /* default enable all test item */
+    fts_test_init_item(tdata);
 
-	/*Allocate test data buffer */
-	len = (test_data.screen_param.tx_num + 1) * test_data.screen_param.rx_num;
-	test_data.buffer = (int *)fts_malloc(len * sizeof(int));
-	if (NULL == test_data.buffer) {
-		FTS_TEST_ERROR("test_data.buffer malloc fail");
-		return -ENOMEM;
-	}
-	memset(test_data.buffer, 0, len * sizeof(int));
+    /* allocate memory for test data:csv&txt */
+    ret = fts_test_malloc_free_data_csv(tdata, true);
+    if (ret < 0) {
+        FTS_TEST_ERROR("allocate memory for test data(csv) fail");
+        return ret;
+    }
 
-	FTS_TEST_FUNC_EXIT();
-	return ret;
+    ret = fts_test_malloc_free_data_txt(tdata, true);
+    if (ret < 0) {
+        FTS_TEST_ERROR("allocate memory for test data(txt) fail");
+        return ret;
+    }
+
+    /* allocate test data buffer */
+    tdata->buffer_length = (tdata->node.tx_num + 1) * tdata->node.rx_num;
+    tdata->buffer_length *= sizeof(int);
+    FTS_TEST_INFO("test buffer length:%d", tdata->buffer_length);
+    tdata->buffer = (int *)fts_malloc(tdata->buffer_length);
+    if (NULL == tdata->buffer) {
+        FTS_TEST_ERROR("test buffer(%d) malloc fail", tdata->buffer_length);
+        return -ENOMEM;
+    }
+    memset(tdata->buffer, 0, tdata->buffer_length);
+
+    FTS_TEST_FUNC_EXIT();
+    return ret;
 }
+
+static int fts_test_main_exit(void)
+{
+    struct fts_test *tdata = fts_ftest;
+
+    FTS_TEST_FUNC_ENTER();
+    fts_test_save_data_csv(tdata);
+    fts_test_save_result_txt(tdata);
+
+    /* free memory */
+    fts_test_malloc_free_data_txt(tdata, false);
+    fts_test_malloc_free_data_csv(tdata, false);
+    fts_test_malloc_free_thr(tdata, false);
+    /*free test data buffer*/
+    fts_free(tdata->buffer);
+
+    FTS_TEST_FUNC_EXIT();
+    return 0;
+}
+
 
 /*
  * fts_test_get_testparams - get test parameter from ini
  */
-
-static int fts_test_main_exit(void)
+static int fts_test_get_testparams(char *config_name)
 {
-	FTS_TEST_FUNC_ENTER();
-	/* free memory */
-	free_struct_DetailThreshold();
-	free_testdata_memory();
+    int ret = 0;
 
-	/*free test data buffer */
-	if (test_data.buffer)
-		fts_free(test_data.buffer);
+    ret = fts_test_get_testparam_from_ini(config_name);
 
-	FTS_TEST_FUNC_EXIT();
-	return 0;
+    return ret;
 }
 
+static int fts_test_start(void)
+{
+    int testresult = 0;
+    struct fts_test *tdata = fts_ftest;
+
+    if (tdata && tdata->func && tdata->func->start_test) {
+        testresult = tdata->func->start_test();
+    } else {
+        FTS_TEST_ERROR("test func/start_test func is null");
+    }
+
+    return testresult;
+}
+
+/*
+ * fts_test_entry - test main entry
+ *
+ * warning - need disable irq & esdcheck before call this function
+ *
+ */
+static int fts_test_entry(char *ini_file_name)
+{
+    int ret = 0;
+
+    /* test initialize */
+    ret = fts_test_main_init();
+    if (ret < 0) {
+        FTS_TEST_ERROR("fts_test_main_init fail");
+        goto test_err;
+    }
+
+    /*Read parse configuration file*/
+    FTS_TEST_SAVE_INFO("ini_file_name:%s\n", ini_file_name);
+    ret = fts_test_get_testparams(ini_file_name);
+    if (ret < 0) {
+        FTS_TEST_ERROR("get testparam fail");
+        goto test_err;
+    }
+
+    /* Start testing according to the test configuration */
+    /* luoguojin ???? */
+    if (true == fts_test_start()) {
+        FTS_TEST_SAVE_INFO("\n\n=======Tp test pass.\n");
+    } else {
+        FTS_TEST_SAVE_INFO("\n\n=======Tp test failure.\n");
+    }
+
+    ret = 0;
+test_err:
+    fts_test_main_exit();
+    enter_work_mode();
+    return ret;
+}
 
 /************************************************************************
 * Name: fts_test_show
@@ -1118,7 +1811,7 @@ static int fts_test_main_exit(void)
 ***********************************************************************/
 static ssize_t fts_test_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return -EPERM;
+    return -EPERM;
 }
 
 /************************************************************************
@@ -1130,35 +1823,38 @@ static ssize_t fts_test_show(struct device *dev, struct device_attribute *attr, 
 ***********************************************************************/
 static ssize_t fts_test_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-	char fwname[128] = { 0 };
-	struct fts_ts_data *ts_data = fts_data;
-	struct input_dev *input_dev;
+    char fwname[128] = {0};
+    struct fts_ts_data *ts_data = fts_data;
+    struct input_dev *input_dev;
 
-	FTS_TEST_FUNC_ENTER();
+    if (ts_data->suspended) {
+        FTS_INFO("In suspend, no test, return now");
+        return -EINVAL;
+    }
 
-	input_dev = ts_data->input_dev;
-	memset(fwname, 0, sizeof(fwname));
-	snprintf(fwname, 128, "%s", buf);
-	fwname[count - 1] = '\0';
-	FTS_TEST_DBG("fwname:%s.", fwname);
+    input_dev = ts_data->input_dev;
+    memset(fwname, 0, sizeof(fwname));
+    sprintf(fwname, "%s", buf);
+    fwname[count - 1] = '\0';
+    FTS_TEST_DBG("fwname:%s.", fwname);
 
-	mutex_lock(&input_dev->mutex);
-	disable_irq(ts_data->irq);
-
-#if defined(FTS_ESDCHECK_EN) && (FTS_ESDCHECK_EN)
-	fts_esdcheck_switch(DISABLE);
-#endif
-
+    mutex_lock(&input_dev->mutex);
+    disable_irq(ts_data->irq);
 
 #if defined(FTS_ESDCHECK_EN) && (FTS_ESDCHECK_EN)
-	fts_esdcheck_switch(ENABLE);
+    fts_esdcheck_switch(DISABLE);
 #endif
 
-	enable_irq(ts_data->irq);
-	mutex_unlock(&input_dev->mutex);
+    fts_test_entry(fwname);
 
-	FTS_TEST_FUNC_EXIT();
-	return count;
+#if defined(FTS_ESDCHECK_EN) && (FTS_ESDCHECK_EN)
+    fts_esdcheck_switch(ENABLE);
+#endif
+
+    enable_irq(ts_data->irq);
+    mutex_unlock(&input_dev->mutex);
+
+    return count;
 }
 
 /*  test from test.ini
@@ -1168,359 +1864,85 @@ static DEVICE_ATTR(fts_test, S_IRUGO | S_IWUSR, fts_test_show, fts_test_store);
 
 /* add your attr in here*/
 static struct attribute *fts_test_attributes[] = {
-	&dev_attr_fts_test.attr,
-	NULL
+    &dev_attr_fts_test.attr,
+    NULL
 };
 
 static struct attribute_group fts_test_attribute_group = {
-	.attrs = fts_test_attributes
+    .attrs = fts_test_attributes
 };
 
-static int fts_i2c_test(void)
+static int fts_test_func_init(void)
 {
-	int ret = 0;
-	u8 chip_id[2] = { 0 };
-	int cnt = 0;
+    int i = 0;
+    int j = 0;
+    int ic_stype = fts_data->ic_info.ids.type;
+    struct test_funcs *func = NULL;
+    int func_count = sizeof(test_func_list) / sizeof(test_func_list[0]);
 
-	do {
-		ret = fts_i2c_read_reg(fts_data->client, FTS_REG_CHIP_ID, &chip_id[0]);
-		ret = fts_i2c_read_reg(fts_data->client, FTS_REG_CHIP_ID2, &chip_id[1]);
-		if ((ret < 0) || (0x0 == chip_id[0]) || (0x0 == chip_id[1])) {
-			cnt++;
-			ret = SELFTEST_FAIL;
-			msleep(100);
-		} else {
-			ret = SELFTEST_PASS;
-			break;
-		}
-	} while (cnt < 10);
+    FTS_TEST_INFO("init test function");
+    if (0 == func_count) {
+        FTS_TEST_SAVE_ERR("test functions list is NULL, fail\n");
+        return -ENODATA;
+    }
 
-	return SELFTEST_PASS;
+    fts_ftest = (struct fts_test *)kzalloc(sizeof(*fts_ftest), GFP_KERNEL);
+    if (NULL == fts_ftest) {
+        FTS_TEST_ERROR("malloc memory for test fail");
+        return -ENOMEM;
+    }
+
+    for (i = 0; i < func_count; i++) {
+        func = test_func_list[i];
+        for (j = 0; j < FTX_MAX_COMPATIBLE_TYPE; j++) {
+            if (0 == func->ctype[j])
+                break;
+            else if (func->ctype[j] == ic_stype) {
+                FTS_TEST_INFO("match test function,type:%x", (int)func->ctype[j]);
+                fts_ftest->func = func;
+            }
+        }
+    }
+    if (NULL == fts_ftest->func) {
+        FTS_TEST_ERROR("no test function match, can't test");
+        return -ENODATA;
+    }
+
+    return 0;
 }
-
-static int fts_tp_selftest_open(struct inode *inode, struct file *file)
-{
-	return 0;
-}
-
-static ssize_t fts_tp_selftest_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
-{
-	char tmp[5];
-	int cnt;
-
-	if (*pos != 0)
-		return 0;
-
-	cnt = snprintf(tmp, sizeof(fts_test_result), "%d\n", fts_test_result);
-	if (copy_to_user(buf, tmp, strlen(tmp)))
-		return -EFAULT;
-	*pos += cnt;
-	return cnt;
-}
-
-static int get_ic_types_by_chipid(short chipid)
-{
-	int i = 0;
-	int type_size = 0;
-
-	type_size = sizeof(ic_types) / sizeof(ic_types[0]);
-	for (i = 0; i < type_size; i++) {
-		if (chipid == ic_types[i].chipid)
-			return ic_types[i].ic_type;
-	}
-
-	return 0;
-}
-
-ssize_t fts_tp_selftest_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
-{
-	char tmp[6];
-	int retval;
-	int id;
-
-	fts_test_result = SELFTEST_INVALID;
-
-	if (!fts_data->client || count > sizeof(tmp)) {
-		retval = -SELFTEST_INVALID;
-		fts_test_result = SELFTEST_INVALID;
-		goto out;
-	}
-
-	if (copy_from_user(tmp, buf, count)) {
-		retval = -EFAULT;
-		fts_test_result = SELFTEST_INVALID;
-		goto out;
-	}
-
-	/* test initialize */
-	retval = fts_test_main_init();
-	if (retval < 0) {
-		FTS_TEST_ERROR("fts_test_main_init() error.");
-		goto test_err;
-	}
-
-	id = get_ic_types_by_chipid(fts_data->chipid);
-	if (id == 0) {
-		retval = -EFAULT;
-		fts_test_result = SELFTEST_INVALID;
-		goto out;
-	}
-
-	retval = init_test_funcs(id);
-	if (retval < 0) {
-		retval = -EFAULT;
-		fts_test_result = SELFTEST_INVALID;
-		goto out;
-	}
-
-	if (!test_data.func) {
-		FTS_TEST_ERROR("[focal] %s - ERROR: can't find test data func", __func__);
-		retval = -SELFTEST_INVALID;
-		fts_test_result = SELFTEST_INVALID;
-		goto out;
-	}
-
-	disable_irq(fts_data->irq);
-	if (!strncmp(tmp, "short", 5)) {
-		if (test_data.func->open_test)
-			fts_test_result = test_data.func->short_test();
-	} else if (!strncmp(tmp, "open", 4)) {
-		if (test_data.func->short_test)
-			fts_test_result = test_data.func->open_test();
-	} else if (!strncmp(tmp, "i2c", 3))
-		fts_test_result = fts_i2c_test();
-	retval = fts_test_result;
-
-	enter_work_mode();
-	enable_irq(fts_data->irq);
-out:
-	if (retval >= 0)
-		retval = count;
-	fts_test_main_exit();
-test_err:
-	return retval;
-}
-
-int fts_tp_selftest_release(struct inode *inode, struct file *file)
-{
-	return 0;
-}
-
-static const struct file_operations tp_selftest_ops = {
-	.open = fts_tp_selftest_open,
-	.read = fts_tp_selftest_read,
-	.write = fts_tp_selftest_write,
-	.release = fts_tp_selftest_release,
-};
-
-static int32_t c_show(struct seq_file *m, void *v)
-{
-	int ret = 0;
-	int i = 0, j = 0, len = 0;
-	int *rawdata = NULL;
-	u8 old_mode = 0;
-	u8 tx_num = 0;
-	u8 rx_num = 0;
-
-	FTS_TEST_FUNC_ENTER();
-
-	rawdata = (int *)vmalloc(PAGE_SIZE * 4);
-	if (!rawdata) {
-		ret = -EFAULT;
-		goto out;
-	}
-
-	/* 0xEE = 1, disable cb */
-	ret = write_reg(FACTORY_REG_AUTO_CAL_FLAG, 0x01);
-	if (ret) {
-		FTS_TEST_ERROR("write data auto cal fail");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	ret = enter_factory_mode();
-	if (ret < 0) {
-		FTS_TEST_ERROR("enter factory mode fail");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	ret = read_reg(FACTORY_REG_CHX_NUM, &tx_num);
-	ret = read_reg(FACTORY_REG_CHY_NUM, &rx_num);
-
-	/* switch to differ mode */
-	ret = read_reg(FACTORY_REG_DATA_SELECT, &old_mode);
-
-/*********************GET RAWDATA*********************/
-	ret = write_reg(FACTORY_REG_DATA_SELECT, 0x00);
-	if (ret) {
-		FTS_TEST_ERROR("write data select fail");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	/* start to scan a frame */
-	ret = start_scan_incell();
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Scan ...\n");
-		return ret;
-	}
-
-	ret = write_reg(FACTORY_REG_LINE_ADDR, 0xAD);
-	if (ret) {
-		FTS_TEST_ERROR("write REG LINE fail");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	ret = read_mass_data(FACTORY_REG_RAWDATA_ADDR, tx_num * rx_num * 2, rawdata);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Get RawData of channel.\n");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	seq_printf(m, "\nRAW DATA\n");
-	len = 0;
-	for (i = 0; (i < tx_num) && (i < TX_NUM_MAX); i++) {
-		for (j = 0; (j < rx_num) && (j < RX_NUM_MAX); j++) {
-			if (j == (rx_num - 1)) {
-				seq_printf(m, "%5d, \n", rawdata[rx_num * i + j]);
-			} else {
-				seq_printf(m, "%5d, ", rawdata[rx_num * i + j]);
-			}
-		}
-	}
-	seq_printf(m, "\nDIFF DATA\n");
-
-/*********************GET DIFFDATA*********************/
-	ret = write_reg(FACTORY_REG_DATA_SELECT, 0x01);
-	if (ret) {
-		FTS_TEST_ERROR("write data select fail");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	/* start to scan a frame */
-	ret = start_scan_incell();
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Scan ...\n");
-		return ret;
-	}
-
-	ret = write_reg(FACTORY_REG_LINE_ADDR, 0xAD);
-	if (ret) {
-		FTS_TEST_ERROR("write REG LINE fail");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	ret = read_mass_data(FACTORY_REG_RAWDATA_ADDR, tx_num * rx_num * 2, rawdata);
-	if (ret) {
-		FTS_TEST_SAVE_INFO("Failed to Get RawData of channel.\n");
-		ret = -EFAULT;
-		goto out;
-	}
-
-	for (i = 0; (i < tx_num) && (i < TX_NUM_MAX); i++) {
-		for (j = 0; (j < rx_num) && (j < RX_NUM_MAX); j++) {
-			if (j == (rx_num - 1)) {
-				seq_printf(m, "%5d, \n", (short)rawdata[rx_num * i + j]);
-			} else {
-				seq_printf(m, "%5d, ", (short)rawdata[rx_num * i + j]);
-			}
-		}
-	}
-	seq_printf(m, "\n\n");
-
-out:
-	if (old_mode)
-		write_reg(FACTORY_REG_DATA_SELECT, old_mode);
-	ret = enter_work_mode();
-	enable_irq(fts_data->irq);
-
-	if (rawdata) {
-		vfree(rawdata);
-		rawdata = NULL;
-	}
-
-	FTS_TEST_FUNC_EXIT();
-	return 0;
-}
-
-static void *c_start(struct seq_file *m, loff_t *pos)
-{
-	return *pos < 1 ? (void *)1 : NULL;
-}
-
-static void *c_next(struct seq_file *m, void *v, loff_t *pos)
-{
-	++*pos;
-	return NULL;
-}
-
-static void c_stop(struct seq_file *m, void *v)
-{
-	return;
-}
-
-const struct seq_operations fts_datadump_seq_ops = {
-	.start  = c_start,
-	.next   = c_next,
-	.stop   = c_stop,
-	.show   = c_show
-};
-
-static int32_t fts_tp_data_open(struct inode *inode, struct file *file)
-{
-	return seq_open(file, &fts_datadump_seq_ops);
-}
-
-static const struct file_operations fts_datadump_fops = {
-	.owner = THIS_MODULE,
-	.open = fts_tp_data_open,
-	.read = seq_read,
-	.llseek = seq_lseek,
-	.release = seq_release,
-};
 
 int fts_test_init(struct i2c_client *client)
 {
-	int ret = 0;
+    int ret = 0;
 
-	FTS_TEST_FUNC_ENTER();
+    FTS_TEST_FUNC_ENTER();
 
-	ret = sysfs_create_group(&client->dev.kobj, &fts_test_attribute_group);
-	if (0 != ret) {
-		FTS_TEST_ERROR("[focal] %s() - ERROR: sysfs_create_group() failed.", __func__);
-		sysfs_remove_group(&client->dev.kobj, &fts_test_attribute_group);
-	} else {
-		FTS_TEST_DBG("[focal] %s() - sysfs_create_group() succeeded.", __func__);
-	}
-	fts_data->tp_selftest_proc = proc_create("tp_selftest", 0644, NULL, &tp_selftest_ops);
-	if (!fts_data->tp_selftest_proc)
-		FTS_TEST_ERROR("[focal] %s() - ERROR: tp_selftest proc create failed.", __func__);
+    /* get test function, must be the first step */
+    ret = fts_test_func_init();
+    if (ret < 0) {
+        FTS_TEST_SAVE_ERR("test functions init fail\n");
+        return ret;
+    }
 
-	fts_data->tp_data_dump_proc = proc_create("tp_data_dump", 0444, NULL, &fts_datadump_fops);
-	FTS_TEST_ERROR("create file node of tp_data_dump");
-    if (!fts_data->tp_data_dump_proc)
-		FTS_TEST_ERROR("[focal] %s() - ERROR: tp_data_dump proc create failed.", __func__);
+    ret = sysfs_create_group(&client->dev.kobj, &fts_test_attribute_group);
+    if (0 != ret) {
+        FTS_TEST_ERROR( "[focal] %s() - ERROR: sysfs_create_group() failed.",  __func__);
+        sysfs_remove_group(&client->dev.kobj, &fts_test_attribute_group);
+    } else {
+        FTS_TEST_DBG("[focal] %s() - sysfs_create_group() succeeded.", __func__);
+    }
 
-	FTS_TEST_FUNC_EXIT();
+    FTS_TEST_FUNC_EXIT();
 
-	return ret;
+    return ret;
 }
 
 int fts_test_exit(struct i2c_client *client)
 {
-	FTS_TEST_FUNC_ENTER();
+    FTS_TEST_FUNC_ENTER();
 
-	sysfs_remove_group(&client->dev.kobj, &fts_test_attribute_group);
-	if (fts_data->tp_selftest_proc)
-		remove_proc_entry("tp_selftest", NULL);
-	if (fts_data->tp_data_dump_proc)
-		remove_proc_entry("tp_data_dump", NULL);
-
-	FTS_TEST_FUNC_EXIT();
-	return 0;
+    sysfs_remove_group(&client->dev.kobj, &fts_test_attribute_group);
+    fts_free(fts_ftest);
+    FTS_TEST_FUNC_EXIT();
+    return 0;
 }
