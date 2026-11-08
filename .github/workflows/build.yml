@@ -82,13 +82,18 @@ jobs:
           git status --porcelain | head -5
           echo "(空表示树是干净的)"
 
-      - name: 配置 (h7000_defconfig)
+      - name: 配置（用官方 .config，保证模块 ABI 一致）
         run: |
           cd kernel
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
-          make O=out h7000_defconfig
-          grep -E 'TOUCHSCREEN_FTS|TOUCHSCREEN_FTS_DIRECTORY' out/.config || true
+          mkdir -p out
+          cp "$GITHUB_WORKSPACE/configs/stock.config" out/.config
+          # 只关掉强制签名校验，保留 MODULE_SIG（否则 struct module 布局变化，module_layout CRC 对不上）
+          scripts/config --file out/.config -d MODULE_SIG_FORCE
+          make O=out olddefconfig
+          grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
+          grep -E '^CONFIG_TOUCHSCREEN_FTS' out/.config
 
       - name: 编译 Image
         run: |
