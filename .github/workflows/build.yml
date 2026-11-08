@@ -25,8 +25,8 @@ jobs:
 
       - name: 拉取内核源码
         run: |
-          git clone --depth 1 https://github.com/sysdrivers/kernel_h7000_bbk.git kernel
-          cd kernel && git log -1 --oneline
+          git clone --depth 1 --branch kernel-src https://github.com/SereinHK/h7000-ksu.git kernel
+          cd kernel && git log -1 --oneline && head -5 Makefile
 
       - name: 配置 (h7000_defconfig)
         run: |
