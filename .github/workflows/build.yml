@@ -70,6 +70,17 @@ jobs:
           p.write_text(s)
           print('patched mdss helpers')
           EOF
+          # 让厂商 .ko 能加载：关掉模块签名校验
+          cat >> arch/arm64/configs/h7000_defconfig <<'EOF'
+          # CONFIG_MODULE_SIG is not set
+          # CONFIG_MODULE_SIG_FORCE is not set
+          # CONFIG_MODULE_SIG_ALL is not set
+          EOF
+          # 提交掉所有改动，让 git 树干净 -> 内核版本号不会多出 "+"
+          git add -A
+          git -c user.name=ci -c user.email=ci@local commit -q -m "ci patches" || true
+          git status --porcelain | head -5
+          echo "(空表示树是干净的)"
 
       - name: 配置 (h7000_defconfig)
         run: |
