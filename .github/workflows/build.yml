@@ -95,7 +95,10 @@ jobs:
           cd kernel
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
+          # 版本号钉死成 4.4.153-perf（厂商 .ko 的 vermagic 要求），否则会多出 "+"
+          touch .scmversion
           make O=out -j"$(nproc)" CC="${CROSS_COMPILE}gcc" HOSTCFLAGS="-fcommon" Image
+          echo "--- version ---"; grep -E 'UTS_RELEASE' out/include/generated/utsrelease.h
 
       - name: 检查产物
         run: |
