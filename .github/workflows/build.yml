@@ -2,6 +2,15 @@ name: build-h7000-kernel
 
 on:
   workflow_dispatch:
+    inputs:
+      chip:
+        description: "FocalTech 芯片型号（_FT8719 / _FT8716 / _FT8736 / _FT8739 …）"
+        type: string
+        default: "_FT8719"
+      ksu:
+        description: "同时集成 KernelSU（暂未启用）"
+        type: boolean
+        default: false
 
 jobs:
   build:
@@ -33,7 +42,20 @@ jobs:
           cd kernel
           sed -i 's|^//#include TRACE_INCLUDE(TRACE_INCLUDE_FILE)|#include TRACE_INCLUDE(TRACE_INCLUDE_FILE)|' include/trace/define_trace.h
           sed -i 's|^#include "../../drivers/gpu/msm/kgsl_trace.h"|/* vendor hack removed by CI */|' include/trace/define_trace.h
-          sed -n '80,95p' include/trace/define_trace.h
+
+      - name: 加入 FocalTech 触摸驱动
+        run: |
+          cd kernel
+          cp -r "$GITHUB_WORKSPACE/vendor/focaltech_touch" drivers/input/touchscreen/focaltech_touch
+          grep -q 'focaltech_touch' drivers/input/touchscreen/Makefile || \
+            echo 'obj-$(CONFIG_TOUCHSCREEN_FTS) += focaltech_touch/' >> drivers/input/touchscreen/Makefile
+          grep -q 'focaltech_touch/Kconfig' drivers/input/touchscreen/Kconfig || \
+            echo 'source "drivers/input/touchscreen/focaltech_touch/Kconfig"' >> drivers/input/touchscreen/Kconfig
+          sed -i 's|^#define FTS_CHIP_TYPE.*|#define FTS_CHIP_TYPE   ${{ inputs.chip }}|' \
+            drivers/input/touchscreen/focaltech_touch/focaltech_config.h
+          echo "--- chip ---"; grep -n 'FTS_CHIP_TYPE' drivers/input/touchscreen/focaltech_touch/focaltech_config.h
+          echo "--- kconfig tail ---"; tail -3 drivers/input/touchscreen/Kconfig
+          echo "--- makefile tail ---"; tail -3 drivers/input/touchscreen/Makefile
 
       - name: 配置 (h7000_defconfig)
         run: |
@@ -41,13 +63,13 @@ jobs:
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
           make O=out h7000_defconfig
+          grep -E 'TOUCHSCREEN_FTS|TOUCHSCREEN_FTS_DIRECTORY' out/.config || true
 
       - name: 编译 Image
         run: |
           cd kernel
           export ARCH=arm64
           export CROSS_COMPILE=aarch64-linux-android-
-          # 绕过 scripts/gcc-wrapper.py（python2 脚本），host 工具加 -fcommon（GCC 10+ 默认 -fno-common）
           make O=out -j"$(nproc)" CC="${CROSS_COMPILE}gcc" HOSTCFLAGS="-fcommon" Image
 
       - name: 检查产物
