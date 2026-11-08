@@ -28,6 +28,13 @@ jobs:
           git clone --depth 1 --branch kernel-src https://github.com/SereinHK/h7000-ksu.git kernel
           cd kernel && git log -1 --oneline && head -5 Makefile
 
+      - name: 修补源码（厂商魔改的 define_trace.h）
+        run: |
+          cd kernel
+          sed -i 's|^//#include TRACE_INCLUDE(TRACE_INCLUDE_FILE)|#include TRACE_INCLUDE(TRACE_INCLUDE_FILE)|' include/trace/define_trace.h
+          sed -i 's|^#include "../../drivers/gpu/msm/kgsl_trace.h"|/* vendor hack removed by CI */|' include/trace/define_trace.h
+          sed -n '80,95p' include/trace/define_trace.h
+
       - name: 配置 (h7000_defconfig)
         run: |
           cd kernel
