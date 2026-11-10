@@ -110,6 +110,8 @@ jobs:
           cp "$GITHUB_WORKSPACE/configs/stock.config" out/.config
           # 只关掉强制签名校验，保留 MODULE_SIG；MODVERSIONS 保持开启——现在 WLAN 模块是我们自己编的，CRC 自然一致
           scripts/config --file out/.config -d MODULE_SIG_FORCE
+          scripts/config --file out/.config -d MODVERSIONS
+          scripts/config --file out/.config -d DEBUG_INFO
           scripts/config --file out/.config -m QCA_CLD_WLAN
           make O=out olddefconfig
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
@@ -154,6 +156,11 @@ jobs:
           make O=out -j"$(nproc)" CC="${CROSS_COMPILE}gcc" HOSTCFLAGS="-fcommon" Image modules
           echo "--- version ---"; grep -E 'UTS_RELEASE' out/include/generated/utsrelease.h
           echo "--- 模块 ---"; find out -name '*.ko' | head -10
+          WLAN=out/drivers/staging/qcacld-3.0/wlan.ko
+          ls -l "$WLAN"
+          aarch64-linux-android-strip --strip-debug "$WLAN"
+          echo "--- strip 后 ---"; ls -l "$WLAN"; file "$WLAN" || true
+          mkdir -p "$GITHUB_WORKSPACE/wlanout"; cp "$WLAN" "$GITHUB_WORKSPACE/wlanout/wlan.ko"
 
       - name: 检查产物
         run: |
@@ -163,6 +170,12 @@ jobs:
       - name: 打包 boot.img
         run: |
           python3 scripts/repack.py kernel/out/arch/arm64/boot/Image assets out
+
+      - name: 上传 WLAN 模块（单独的小包）
+        uses: actions/upload-artifact@v4
+        with:
+          name: wlan-ko
+          path: wlanout/wlan.ko
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
