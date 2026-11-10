@@ -94,6 +94,34 @@ jobs:
           make O=out olddefconfig
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
           grep -E '^CONFIG_TOUCHSCREEN_FTS' out/.config
+          python3 - <<'EOF'
+          import os, re
+          def parse(path):
+              d = {}
+              for line in open(path):
+                  s = line.strip()
+                  m = re.match(r'# (CONFIG_\w+) is not set', s)
+                  if m:
+                      d[m.group(1)] = 'n'; continue
+                  m = re.match(r'(CONFIG_\w+)=(.*)', s)
+                  if m:
+                      d[m.group(1)] = m.group(2)
+              return d
+          stock = parse(os.environ.get('GITHUB_WORKSPACE', '.') + '/configs/stock.config')
+          built = parse('out/.config')
+          keys = set(stock) | set(built)
+          diff = sorted(k for k in keys if stock.get(k) != built.get(k))
+          print(f'config diff: {len(diff)} symbols')
+          pat = re.compile(r'MODULE|MODVERSIONS|TRACE|KPROBE|LIVEPATCH|UNWINDER|STACKTRACE|JUMP_LABEL|KALLSYMS|FTRACE|EVENT_TRACING|PERF_EVENTS')
+          important = [k for k in diff if pat.search(k)]
+          print('module-ABI related diffs:', len(important))
+          for k in important[:60]:
+              print(f'  {k}: stock={stock.get(k)} built={built.get(k)}')
+          other = [k for k in diff if k not in important]
+          print('other diffs:', len(other))
+          for k in other[:30]:
+              print(f'  {k}: stock={stock.get(k)} built={built.get(k)}')
+          EOF
 
       - name: 编译 Image
         run: |
