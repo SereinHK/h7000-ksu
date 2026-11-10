@@ -87,11 +87,11 @@ jobs:
           git clone --depth 1 --filter=blob:none --sparse -b lineage-17.1 \
             https://github.com/LineageOS/android_kernel_xiaomi_sdm660.git wlansrc
           cd wlansrc
-          git sparse-checkout set drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn
-          du -sh drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn
+          git sparse-checkout set drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn drivers/staging/fw-api
+          du -sh drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn drivers/staging/fw-api
           ls drivers/staging/qcacld-3.0 | head -5
           # 装进我们的内核树
-          cp -r drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn "$GITHUB_WORKSPACE/kernel/drivers/staging/"
+          cp -r drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn drivers/staging/fw-api "$GITHUB_WORKSPACE/kernel/drivers/staging/"
           cd "$GITHUB_WORKSPACE/kernel"
           grep -q 'qcacld-3.0/Kconfig' drivers/staging/Kconfig || \
             echo 'source "drivers/staging/qcacld-3.0/Kconfig"' >> drivers/staging/Kconfig
