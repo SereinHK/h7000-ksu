@@ -2,3 +2,4 @@
 *.bin binary
 *.dtb binary
 *.img binary
+assets/ksud binary

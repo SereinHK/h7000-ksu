@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """把编译出来的 ARM64 Image 打包成 H7000 可刷的 boot.img。
 
-布局完全照官方镜像：
-  [1 页 boot header][gzip(Image)][31 个 DTB][补齐到 4K][1,320 B verity 证书]
+布局（有 ramdisk 时）：
+  [1 页 boot header][gzip(Image)+DTB][补齐 4K][ramdisk][补齐 4K][1,320 B verity 证书]
+
+没有 assets/ramdisk.cpio.gz 时退回原布局（内核+DTB 后面直接接证书）。
 
 用法: python3 repack.py <Image> <assets 目录> <输出目录>
 """
@@ -44,13 +46,22 @@ def main() -> int:
             dtbs.append(blob)
     print(f"DTB: {len(dtbs)} 个, 共 {sum(map(len, dtbs)):,} B")
 
+    rd_path = os.path.join(assets, "ramdisk.cpio.gz")
+    ramdisk = open(rd_path, "rb").read() if os.path.exists(rd_path) else b""
+    if ramdisk:
+        print(f"ramdisk: {len(ramdisk):,} B")
+
     gz = gzip_kernel(img)
     kernel_size = len(gz) + sum(map(len, dtbs))
     print(f"gzip: {len(gz):,} B  -> kernel_size={kernel_size:#x}")
     struct.pack_into("<I", hdr, 8, kernel_size)
+    struct.pack_into("<I", hdr, 16, len(ramdisk))
 
     body = bytes(hdr) + gz + b"".join(dtbs)
-    body += b"\x00" * ((-len(body)) % PAGE)
+    if ramdisk:
+        body += b"\x00" * ((-len(body)) % PAGE)
+        body += ramdisk
+        body += b"\x00" * ((-len(body)) % PAGE)
     boot = body + cert
 
     os.makedirs(outdir, exist_ok=True)
