@@ -18,9 +18,7 @@ extern int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
 
 BODY_EXEC = """
 #ifdef CONFIG_KSU
-	pr_info("KSU: exec hook hit");
 	ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
-	ksu_handle_execveat_sucompat(&fd, &filename, &argv, &envp, &flags);
 #endif
 """
 
