@@ -171,5 +171,5 @@ jobs:
           path: |
             out/boot.img
             kernel/out/arch/arm64/boot/Image
-            kernel/out/drivers/staging/qcacld-3.0/qca_cld3_wlan.ko
-            kernel/out/drivers/staging/qca-wifi-host-cmn/**/*.ko
+            kernel/out/drivers/staging/qcacld-3.0/wlan.ko
+            kernel/out/drivers/staging/qcacld-3.0/**/*.ko
