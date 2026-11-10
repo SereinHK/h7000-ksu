@@ -146,6 +146,17 @@ jobs:
           assert a2 in s2, 'panel anchor missing'
           s2 = s2.replace(a2, a2 + '\n\tpr_info("KSU-DIAG: bl control-type=%s\\n", data ? data : "(none)");', 1)
           open(p2, 'w').write(s2)
+
+          p3 = 'drivers/video/fbdev/msm/mdss_fb.c'
+          s3 = open(p3).read()
+          a3 = '\tu32 temp = bkl_lvl;'
+          assert a3 in s3, 'mdss_fb anchor missing'
+          diag3 = ('\tu32 temp = bkl_lvl;\n'
+                   '\tpr_info("KSU-DIAG-BL: lvl=%u splash=%d allow_upd=%d pwr_off=%d bl_level=%u\\n",\n'
+                   '\t\tbkl_lvl, mfd->panel_info->cont_splash_enabled,\n'
+                   '\t\tmfd->allow_bl_update, mdss_fb_is_power_off(mfd), mfd->bl_level);\n')
+          s3 = s3.replace(a3, diag3, 1)
+          open(p3, 'w').write(s3)
           print('KSU-DIAG inserted OK')
           EOF
       - name: 配置（用官方 .config，保证模块 ABI 一致）
