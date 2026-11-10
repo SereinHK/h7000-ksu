@@ -105,6 +105,8 @@ jobs:
         run: |
           git clone --depth 1 -b v0.9.5 https://github.com/tiann/KernelSU.git ksu-src
           cp -r ksu-src/kernel kernel/drivers/kernelsu
+          sed -i 's|#define KSUD_PATH "/data/adb/ksud"|#define KSUD_PATH "/data/local/tmp/ksud"|' kernel/drivers/kernelsu/ksud.h
+          grep -n 'KSUD_PATH' kernel/drivers/kernelsu/ksud.h
           python3 scripts/ksu_integrate.py kernel
           echo "--- KSU 版本 ---"; grep -n 'KSU_VERSION' kernel/drivers/kernelsu/Makefile | head -5
           echo "--- drivers/Kconfig 尾部 ---"; tail -4 kernel/drivers/Kconfig
