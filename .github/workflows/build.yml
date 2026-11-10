@@ -82,6 +82,26 @@ jobs:
           git status --porcelain | head -5
           echo "(空表示树是干净的)"
 
+      - name: 拉取 WLAN 驱动源码（qcacld-3.0 + qca-wifi-host-cmn）
+        run: |
+          git clone --depth 1 --filter=blob:none --sparse -b lineage-17.1 \
+            https://github.com/LineageOS/android_kernel_xiaomi_sdm660.git wlansrc
+          cd wlansrc
+          git sparse-checkout set drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn
+          du -sh drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn
+          ls drivers/staging/qcacld-3.0 | head -5
+          # 装进我们的内核树
+          cp -r drivers/staging/qcacld-3.0 drivers/staging/qca-wifi-host-cmn "$GITHUB_WORKSPACE/kernel/drivers/staging/"
+          cd "$GITHUB_WORKSPACE/kernel"
+          grep -q 'qcacld-3.0/Kconfig' drivers/staging/Kconfig || \
+            echo 'source "drivers/staging/qcacld-3.0/Kconfig"' >> drivers/staging/Kconfig
+          grep -q 'qcacld-3.0/' drivers/staging/Makefile || {
+            echo 'obj-$(CONFIG_QCA_CLD_WLAN) += qca-wifi-host-cmn/' >> drivers/staging/Makefile
+            echo 'obj-$(CONFIG_QCA_CLD_WLAN) += qcacld-3.0/' >> drivers/staging/Makefile
+          }
+          echo "--- staging Makefile tail ---"; tail -4 drivers/staging/Makefile
+          echo "--- staging Kconfig tail ---"; tail -3 drivers/staging/Kconfig
+
       - name: 配置（用官方 .config，保证模块 ABI 一致）
         run: |
           cd kernel
@@ -89,13 +109,13 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           mkdir -p out
           cp "$GITHUB_WORKSPACE/configs/stock.config" out/.config
-          # 只关掉强制签名校验，保留 MODULE_SIG（否则 struct module 布局变化，module_layout CRC 对不上）
+          # 只关掉强制签名校验，保留 MODULE_SIG；MODVERSIONS 保持开启——现在 WLAN 模块是我们自己编的，CRC 自然一致
           scripts/config --file out/.config -d MODULE_SIG_FORCE
-          # 关闭 CRC 校验，让厂商 .ko 能加载（配合给 .ko 改 vermagic）
-          scripts/config --file out/.config -d MODVERSIONS
+          scripts/config --file out/.config -m QCA_CLD_WLAN
           make O=out olddefconfig
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
           grep -E '^CONFIG_TOUCHSCREEN_FTS' out/.config
+          grep -E '^(CONFIG_QCA_CLD_WLAN|CONFIG_WLAN=)' out/.config
           python3 - <<'EOF'
           import os, re
           def parse(path):
@@ -132,8 +152,9 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           # 版本号钉死成 4.4.153-perf（厂商 .ko 的 vermagic 要求），否则会多出 "+"
           touch .scmversion
-          make O=out -j"$(nproc)" CC="${CROSS_COMPILE}gcc" HOSTCFLAGS="-fcommon" Image
+          make O=out -j"$(nproc)" CC="${CROSS_COMPILE}gcc" HOSTCFLAGS="-fcommon" Image modules
           echo "--- version ---"; grep -E 'UTS_RELEASE' out/include/generated/utsrelease.h
+          echo "--- 模块 ---"; find out -name '*.ko' | head -10
 
       - name: 检查产物
         run: |
@@ -151,3 +172,5 @@ jobs:
           path: |
             out/boot.img
             kernel/out/arch/arm64/boot/Image
+            kernel/out/drivers/staging/qcacld-3.0/qca_cld3_wlan.ko
+            kernel/out/drivers/staging/qca-wifi-host-cmn/**/*.ko
