@@ -107,6 +107,18 @@ jobs:
           cp -r ksu-src/kernel kernel/drivers/kernelsu
 
           python3 scripts/ksu_integrate.py kernel
+          python3 - <<'EOF'
+          p = 'kernel/drivers/kernelsu/ksud.c'
+          s = open(p).read()
+          n = 0
+          for arg in ('post-fs-data', 'services', 'boot-completed'):
+              old = '"    exec u:r:su:s0 root -- " KSUD_PATH " %s\\n"' % arg
+              new = '"    exec u:r:su:s0 root -- /system/bin/sh -c \\"" KSUD_PATH " %s\\"\\n"' % arg
+              n += s.count(old)
+              s = s.replace(old, new)
+          open(p, 'w').write(s)
+          print('rc lines wrapped with sh:', n)
+          EOF
           echo "--- KSU 版本 ---"; grep -n 'KSU_VERSION' kernel/drivers/kernelsu/Makefile | head -5
           echo "--- drivers/Kconfig 尾部 ---"; tail -4 kernel/drivers/Kconfig
           echo "--- kernelsu/Kconfig 头部 ---"; head -6 kernel/drivers/kernelsu/Kconfig
