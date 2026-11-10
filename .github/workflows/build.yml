@@ -107,6 +107,8 @@ jobs:
           cp -r ksu-src/kernel kernel/drivers/kernelsu
           python3 scripts/ksu_integrate.py kernel
           echo "--- KSU 版本 ---"; grep -n 'KSU_VERSION' kernel/drivers/kernelsu/Makefile | head -5
+          echo "--- drivers/Kconfig 尾部 ---"; tail -4 kernel/drivers/Kconfig
+          echo "--- kernelsu/Kconfig 头部 ---"; head -6 kernel/drivers/kernelsu/Kconfig
 
       - name: 配置（用官方 .config，保证模块 ABI 一致）
         run: |
@@ -125,6 +127,7 @@ jobs:
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
           grep -E '^CONFIG_TOUCHSCREEN_FTS' out/.config
           grep -E '^(CONFIG_QCA_CLD_WLAN|CONFIG_WLAN=)' out/.config
+          echo "--- KSU 配置检查 ---"; grep -i ksu out/.config || echo "!! CONFIG_KSU 不在 .config 里"
           python3 - <<'EOF'
           import os, re
           def parse(path):
