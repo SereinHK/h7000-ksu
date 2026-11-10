@@ -96,7 +96,6 @@ jobs:
           grep -q 'qcacld-3.0/Kconfig' drivers/staging/Kconfig || \
             echo 'source "drivers/staging/qcacld-3.0/Kconfig"' >> drivers/staging/Kconfig
           grep -q 'qcacld-3.0/' drivers/staging/Makefile || {
-            echo 'obj-$(CONFIG_QCA_CLD_WLAN) += qca-wifi-host-cmn/' >> drivers/staging/Makefile
             echo 'obj-$(CONFIG_QCA_CLD_WLAN) += qcacld-3.0/' >> drivers/staging/Makefile
           }
           echo "--- staging Makefile tail ---"; tail -4 drivers/staging/Makefile
