@@ -126,6 +126,7 @@ jobs:
           scripts/config --file out/.config -e QCA_CLD_WLAN
           scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -e KSU
+          scripts/config --file out/.config -e KSU_DEBUG
           make O=out olddefconfig
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
           grep -E '^CONFIG_TOUCHSCREEN_FTS' out/.config
