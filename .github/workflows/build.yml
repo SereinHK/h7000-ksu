@@ -171,10 +171,14 @@ jobs:
           echo "--- version ---"; grep -E 'UTS_RELEASE' out/include/generated/utsrelease.h
           echo "--- 模块 ---"; find out -name '*.ko' | head -10
           WLAN=out/drivers/staging/qcacld-3.0/wlan.ko
-          ls -l "$WLAN"
-          aarch64-linux-android-strip --strip-debug "$WLAN"
-          echo "--- strip 后 ---"; ls -l "$WLAN"; file "$WLAN" || true
-          mkdir -p "$GITHUB_WORKSPACE/wlanout"; cp "$WLAN" "$GITHUB_WORKSPACE/wlanout/wlan.ko"
+          if [ -f "$WLAN" ]; then
+            ls -l "$WLAN"
+            aarch64-linux-android-strip --strip-debug "$WLAN"
+            echo "--- strip 后 ---"; ls -l "$WLAN"
+            mkdir -p "$GITHUB_WORKSPACE/wlanout"; cp "$WLAN" "$GITHUB_WORKSPACE/wlanout/wlan.ko"
+          else
+            echo "WLAN 已编译进内核（built-in），没有 .ko"
+          fi
 
       - name: 检查产物
         run: |
@@ -190,6 +194,7 @@ jobs:
         with:
           name: wlan-ko
           path: wlanout/wlan.ko
+          if-no-files-found: ignore
 
       - name: 上传产物
         uses: actions/upload-artifact@v4
