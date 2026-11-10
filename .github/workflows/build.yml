@@ -105,8 +105,6 @@ jobs:
         run: |
           git clone --depth 1 -b v0.9.5 https://github.com/tiann/KernelSU.git ksu-src
           cp -r ksu-src/kernel kernel/drivers/kernelsu
-          sed -i 's|#define KSUD_PATH "/data/adb/ksud"|#define KSUD_PATH "/sbin/ksud"|' kernel/drivers/kernelsu/ksud.h
-          grep -n 'KSUD_PATH' kernel/drivers/kernelsu/ksud.h
 
           python3 scripts/ksu_integrate.py kernel
           echo "--- KSU 版本 ---"; grep -n 'KSU_VERSION' kernel/drivers/kernelsu/Makefile | head -5
@@ -186,14 +184,6 @@ jobs:
           ls -l kernel/out/arch/arm64/boot/Image
           xxd -l 64 kernel/out/arch/arm64/boot/Image
 
-      - name: 制作 ksud ramdisk
-        run: |
-          mkdir -p rd/sbin
-          cp assets/ksud rd/sbin/ksud
-          chmod 755 rd/sbin/ksud
-          cd rd && find . | cpio -o -H newc 2>/dev/null | gzip -9 > ../assets/ramdisk.cpio.gz
-          cd ..; ls -l assets/ramdisk.cpio.gz
-          python3 -c "import gzip;d=gzip.open('assets/ramdisk.cpio.gz','rb').read();print('cpio size',len(d),'has ksud:',b'ksud' in d)"
 
       - name: 打包 boot.img
         run: |
