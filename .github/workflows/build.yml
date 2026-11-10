@@ -122,6 +122,7 @@ jobs:
           scripts/config --file out/.config -d MODVERSIONS
           scripts/config --file out/.config -d DEBUG_INFO
           scripts/config --file out/.config -m QCA_CLD_WLAN
+          scripts/config --file out/.config -e OVERLAY_FS
           scripts/config --file out/.config -e KSU
           make O=out olddefconfig
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
