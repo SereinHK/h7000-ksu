@@ -172,6 +172,26 @@ jobs:
           print('backlight early-return removed')
           EOF
           grep -n "cont_splash_enabled" drivers/video/fbdev/msm/mdss_fb.c | head -3
+      - name: 补丁：亮度绕开 AD/ext_bl_ctrl
+        run: |
+          cd kernel
+          python3 - <<'EOF'
+          p = 'drivers/video/fbdev/msm/mdss_fb.c'
+          s = open(p).read()
+          old = 'if (!IS_CALIB_MODE_BL(mfd) && (!mfd->ext_bl_ctrl || !value ||\n\t\t\t\t\t\t\t!mfd->bl_level)) {'
+          if old not in s:
+              # 正则兜底
+              import re
+              pat = re.compile(r'if \(!IS_CALIB_MODE_BL\(mfd\) && \(!mfd->ext_bl_ctrl \|\| !value \|\|\s*\n\s*!mfd->bl_level\)\) \{')
+              s2, n = pat.subn('if (!IS_CALIB_MODE_BL(mfd)) {', s, count=1)
+              if n != 1:
+                  raise SystemExit('ext_bl_ctrl anchor not found')
+              open(p, 'w').write(s2)
+          else:
+              open(p, 'w').write(s.replace(old, 'if (!IS_CALIB_MODE_BL(mfd)) {', 1))
+          print('ext_bl_ctrl bypass applied')
+          EOF
+          grep -n "ext_bl_ctrl" drivers/video/fbdev/msm/mdss_fb.c | head -3
       - name: 配置（用官方 .config，保证模块 ABI 一致）
         run: |
           cd kernel
