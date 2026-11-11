@@ -123,42 +123,29 @@ jobs:
           echo "--- drivers/Kconfig 尾部 ---"; tail -4 kernel/drivers/Kconfig
           echo "--- kernelsu/Kconfig 头部 ---"; head -6 kernel/drivers/kernelsu/Kconfig
 
-      - name: 诊断：背光 printk
+      - name: 加入 NXP TFA98xx 功放驱动
         run: |
+          mkdir -p kernel/sound/soc/codecs/tfa98xx
+          cp vendor/tfa98xx/* kernel/sound/soc/codecs/tfa98xx/
+          cat > kernel/sound/soc/codecs/tfa98xx/Makefile <<'MK'
+          snd-soc-tfa98xx-objs := tfa_container.o tfa_dsp.o tfa98xx.o tfa9887_init.o \
+          	tfa9887B_init.o tfa9888_init.o tfa9890_init.o tfa9891_init.o tfa9897_init.o
+          obj-$(CONFIG_SND_SOC_TFA98XX) += snd-soc-tfa98xx.o
+          MK
+          cat > kernel/sound/soc/codecs/tfa98xx/Kconfig <<'KC'
+          config SND_SOC_TFA98XX
+          	tristate "NXP TFA98xx speaker amplifier"
+          	depends on I2C
+          	help
+          	  Say Y for NXP TFA98xx smart amplifier support.
+          KC
           cd kernel
-          python3 - <<'EOF'
-          p = 'drivers/video/fbdev/msm/mdss_dsi.c'
-          s = open(p).read()
-          anchor = '\tif (!mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data) ||'
-          diag = ('\tpr_info("KSU-DIAG: split=%d pdest=%d\\n",\n'
-                  '\t\tmdss_dsi_is_hw_config_split(ctrl_pdata->shared_data),\n'
-                  '\t\tctrl_pdata->panel_data.panel_info.pdest);\n')
-          assert anchor in s, 'dsi anchor missing'
-          s = s.replace(anchor, diag + anchor, 1)
-          anchor2 = '\trc = dsi_panel_device_register(pdev, dsi_pan_node, ctrl_pdata);'
-          assert anchor2 in s, 'dsi anchor2 missing'
-          s = s.replace(anchor2, '\tpr_info("KSU-DIAG: bklt_ctrl=%d\\n", ctrl_pdata->bklt_ctrl);\n' + anchor2, 1)
-          open(p, 'w').write(s)
-
-          p2 = 'drivers/video/fbdev/msm/mdss_dsi_panel.c'
-          s2 = open(p2).read()
-          a2 = '\tdata = of_get_property(np, "qcom,mdss-dsi-bl-pmic-control-type", NULL);'
-          assert a2 in s2, 'panel anchor missing'
-          s2 = s2.replace(a2, a2 + '\n\tpr_info("KSU-DIAG: bl control-type=%s\\n", data ? data : "(none)");', 1)
-          open(p2, 'w').write(s2)
-
-          p3 = 'drivers/video/fbdev/msm/mdss_fb.c'
-          s3 = open(p3).read()
-          a3 = '\tu32 temp = bkl_lvl;'
-          assert a3 in s3, 'mdss_fb anchor missing'
-          diag3 = ('\tu32 temp = bkl_lvl;\n'
-                   '\tpr_info("KSU-DIAG-BL: lvl=%u splash=%d allow_upd=%d pwr_off=%d bl_level=%u\\n",\n'
-                   '\t\tbkl_lvl, mfd->panel_info->cont_splash_enabled,\n'
-                   '\t\tmfd->allow_bl_update, mdss_fb_is_power_off(mfd), mfd->bl_level);\n')
-          s3 = s3.replace(a3, diag3, 1)
-          open(p3, 'w').write(s3)
-          print('KSU-DIAG inserted OK')
-          EOF
+          grep -q 'tfa98xx/Kconfig' sound/soc/codecs/Kconfig || \
+            echo 'source "sound/soc/codecs/tfa98xx/Kconfig"' >> sound/soc/codecs/Kconfig
+          grep -q 'tfa98xx/' sound/soc/codecs/Makefile || \
+            echo 'obj-$(CONFIG_SND_SOC_TFA98XX) += tfa98xx/' >> sound/soc/codecs/Makefile
+          ls sound/soc/codecs/tfa98xx | head -5
+          tail -2 sound/soc/codecs/Makefile
       - name: 配置（用官方 .config，保证模块 ABI 一致）
         run: |
           cd kernel
@@ -172,6 +159,7 @@ jobs:
           scripts/config --file out/.config -d DEBUG_INFO
           scripts/config --file out/.config -e QCA_CLD_WLAN
           scripts/config --file out/.config -e OVERLAY_FS
+          scripts/config --file out/.config -e SND_SOC_TFA98XX
           scripts/config --file out/.config -e KSU
           make O=out olddefconfig
           grep -E '^(CONFIG_MODULE_SIG|# CONFIG_MODULE_SIG_FORCE|CONFIG_MODULE_SIG_ALL|CONFIG_LOCALVERSION=)' out/.config
