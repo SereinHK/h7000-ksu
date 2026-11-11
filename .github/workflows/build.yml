@@ -146,6 +146,32 @@ jobs:
             echo 'obj-$(CONFIG_SND_SOC_TFA98XX) += tfa98xx/' >> sound/soc/codecs/Makefile
           ls sound/soc/codecs/tfa98xx | head -5
           tail -2 sound/soc/codecs/Makefile
+      - name: 补丁：背光写入不再早退
+        run: |
+          cd kernel
+          python3 - <<'EOF'
+          import re
+          p = 'drivers/video/fbdev/msm/mdss_fb.c'
+          s = open(p).read()
+          old = '''	if ((((mdss_fb_is_power_off(mfd) && mfd->dcm_state != DCM_ENTER)
+          		|| !mfd->allow_bl_update) && !IS_CALIB_MODE_BL(mfd)) ||
+          		mfd->panel_info->cont_splash_enabled) {
+          		mfd->unset_bl_level = bkl_lvl;
+          		return;
+          	}'''
+          new = '''	if (mfd->panel_info->cont_splash_enabled) {
+          		mfd->unset_bl_level = bkl_lvl;
+          		return;
+          	}'''
+          # 用正则兜住空白差异
+          pat = re.compile(r'if \(\(\(\(mdss_fb_is_power_off\(mfd\).*?\n\t\}\n', re.S)
+          s2, n = pat.subn(new + '\n', s, count=1)
+          if n != 1:
+              raise SystemExit('patch anchor not found')
+          open(p, 'w').write(s2)
+          print('backlight early-return removed')
+          EOF
+          grep -n "cont_splash_enabled" drivers/video/fbdev/msm/mdss_fb.c | head -3
       - name: 配置（用官方 .config，保证模块 ABI 一致）
         run: |
           cd kernel
